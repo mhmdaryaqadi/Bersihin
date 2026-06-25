@@ -451,14 +451,22 @@ class AdminUsersFrame(ctk.CTkFrame):
                 self.after(0, lambda: messagebox.showerror("Error", f"Gagal memuat pengguna: {err}"))
                 self.after(0, lambda: self.lbl_no_selection.configure(text="Gagal memuat data."))
                 return
-                
-            self.after(0, lambda: self.render_users(users))
+            
+            self.all_users = users
+            self.after(0, self.render_users)
             
         threading.Thread(target=run, daemon=True).start()
  
-    def render_users(self, users):
+    def render_users(self):
+        # Clear current list
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+        self.row_widgets = {}
+        
+        users = getattr(self, 'all_users', None)
         if not users:
             self.lbl_no_selection.configure(text="Tidak ada data pengguna.")
+            self.lbl_no_selection.pack(expand=True)
             return
             
         self.lbl_no_selection.configure(text="Pilih pengguna dari daftar\nuntuk melihat rincian & aksi.")
@@ -484,8 +492,8 @@ class AdminUsersFrame(ctk.CTkFrame):
             self.lbl_no_selection.pack(expand=True)
  
     def on_search_change(self, event):
-        # Trigger reload based on search text change
-        self.load_users()
+        # Filter in-memory only, no database load!
+        self.render_users()
  
     def on_user_selected(self, uid, user_data, widget):
         if self.selected_row_widget:

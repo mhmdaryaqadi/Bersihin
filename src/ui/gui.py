@@ -633,8 +633,8 @@ class FileCleanerFrame(ctk.CTkFrame):
         is_admin = memory_cleaner.is_admin()
         
         for key, info in self.targets.items():
-            # Container for each target
-            item_frame = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
+            # Container for each target (using standard tk.Frame for high performance redraws)
+            item_frame = tk.Frame(self.scroll_frame, bg="#1E1E1E")
             item_frame.grid(row=row_idx, column=0, padx=10, pady=8, sticky="ew")
             item_frame.columnconfigure(1, weight=1)
             
@@ -1504,33 +1504,29 @@ class AppManagerFrame(ctk.CTkFrame):
     def filter_installed_apps(self, event=None):
         q = self.search_entry.get().strip().lower()
         
-        for widget in self.app_scroll.winfo_children():
-            widget.destroy()
-            
-        filtered = [app for app in self.apps_list if q in app['name'].lower()]
-        
-        if not filtered:
-            lbl = ctk.CTkLabel(self.app_scroll, text="Tidak ada software yang cocok.", text_color="#888888")
-            lbl.pack(pady=20)
+        # If app_widgets is not initialized yet, skip
+        if not getattr(self, 'app_widgets', None):
             return
             
-        for app in filtered:
-            row = ctk.CTkFrame(self.app_scroll, fg_color="#1E1E1E", height=50)
-            row.pack(fill="x", pady=4, padx=5)
-            row.pack_propagate(False)
-            
-            lbl_name = ctk.CTkLabel(
-                row, text=app['name'], font=ctk.CTkFont(size=12, weight="bold"),
-                anchor="w", width=350
-            )
-            lbl_name.pack(side="left", padx=15, fill="x", expand=True)
-            
-            btn_uninstall = ctk.CTkButton(
-                row, text="Uninstall", font=ctk.CTkFont(size=11, weight="bold"),
-                fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
-                width=80, height=28, command=lambda a=app: self.confirm_uninstall(a)
-            )
-            btn_uninstall.pack(side="right", padx=15, pady=10)
+        visible_count = 0
+        for app_name, row_widget in self.app_widgets:
+            if not q or q in app_name:
+                # Show row if matches search query
+                if not row_widget.winfo_manager(): # If not currently packed
+                    row_widget.pack(fill="x", pady=4, padx=5)
+                visible_count += 1
+            else:
+                # Hide row
+                row_widget.pack_forget()
+                
+        # If no apps match, show a label
+        if visible_count == 0:
+            if not getattr(self, 'lbl_no_match', None):
+                self.lbl_no_match = ctk.CTkLabel(self.app_scroll, text="Tidak ada software yang cocok.", text_color="#888888")
+            self.lbl_no_match.pack(pady=20)
+        else:
+            if getattr(self, 'lbl_no_match', None):
+                self.lbl_no_match.pack_forget()
 
     def load_installed_apps(self):
         for widget in self.app_scroll.winfo_children():
@@ -1549,11 +1545,33 @@ class AppManagerFrame(ctk.CTkFrame):
     def render_installed_apps(self):
         for widget in self.app_scroll.winfo_children():
             widget.destroy()
+        self.app_widgets = []
+        self.lbl_no_match = None
             
         if not self.apps_list:
             lbl = ctk.CTkLabel(self.app_scroll, text="Gagal memuat daftar aplikasi.", text_color="#EF4444")
             lbl.pack(pady=40)
             return
+            
+        for app in self.apps_list:
+            row = ctk.CTkFrame(self.app_scroll, fg_color="#1E1E1E", height=50)
+            row.pack(fill="x", pady=4, padx=5)
+            row.pack_propagate(False)
+            
+            lbl_name = ctk.CTkLabel(
+                row, text=app['name'], font=ctk.CTkFont(size=12, weight="bold"),
+                anchor="w"
+            )
+            lbl_name.pack(side="left", padx=15, fill="x", expand=True)
+            
+            btn_uninstall = ctk.CTkButton(
+                row, text="Uninstall", font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+                width=80, height=28, command=lambda a=app: self.confirm_uninstall(a)
+            )
+            btn_uninstall.pack(side="right", padx=15, pady=10)
+            
+            self.app_widgets.append((app['name'].lower(), row))
             
         self.filter_installed_apps()
 
@@ -1852,7 +1870,7 @@ class App(ctk.CTk):
         # Intercept window close to minimize to tray
         self.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         self.tray_icon = None
-        self.setup_tray_icon()
+        self.after(1000, self.setup_tray_icon)
         
         # Custom Icon (if available, fallback to standard)
         try:
@@ -2211,7 +2229,7 @@ class App(ctk.CTk):
         """Runs a daemon thread to monitor RAM and run auto-clean when limit exceeded, and check for block status."""
         def monitor():
             while True:
-                time.sleep(10)
+                time.sleep(15)
                 
                 # Check for block status from database
                 if self.current_user:
