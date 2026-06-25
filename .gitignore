@@ -1,0 +1,21 @@
+# Virtual Environment
+venv/
+.venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# PyInstaller / Build outputs
+build/
+dist/
+*.spec
+*.exe
+
+# Private session tokens / local DB
+session.json
+admin_session.json
+local_db.json
