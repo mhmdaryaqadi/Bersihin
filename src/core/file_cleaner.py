@@ -259,3 +259,268 @@ def clean_target(key, target_info):
             total_failed += failed
             
     return total_freed, total_deleted, total_failed
+
+
+# ================= FITUR PREMIUM: CARI DUPLIKAT & UNINSTALLER SISA =================
+
+import hashlib
+import winreg
+
+def find_duplicate_files(directory, progress_callback=None):
+    """Memindai direktori untuk mencari file duplikat berdasarkan ukuran & hash MD5."""
+    size_map = {}
+    duplicates = []
+    
+    if not os.path.exists(directory):
+        return []
+        
+    try:
+        # Walk directory
+        for dirpath, _, filenames in os.walk(directory):
+            for filename in filenames:
+                file_path = os.path.join(dirpath, filename)
+                if os.path.islink(file_path):
+                    continue
+                try:
+                    size = os.path.getsize(file_path)
+                    if size > 0:
+                        size_map.setdefault(size, []).append(file_path)
+                except (OSError, PermissionError):
+                    pass
+    except Exception:
+        pass
+        
+    # Filter ukuran yang memiliki lebih dari 1 file
+    potential_dupes = {size: paths for size, paths in size_map.items() if len(paths) > 1}
+    
+    # Hash cepat MD5 (1024 byte pertama) untuk efisiensi
+    quick_hash_map = {}
+    for size, paths in potential_dupes.items():
+        for path in paths:
+            try:
+                with open(path, 'rb') as f:
+                    chunk = f.read(1024)
+                    h = hashlib.md5(chunk).hexdigest()
+                    quick_hash_map.setdefault((size, h), []).append(path)
+            except Exception:
+                pass
+                
+    # Filter lagi hasil hash cepat
+    potential_dupes_2 = {sh: paths for sh, paths in quick_hash_map.items() if len(paths) > 1}
+    
+    # Hash penuh MD5 untuk memastikan file benar-benar kembar
+    full_hash_map = {}
+    for (size, qh), paths in potential_dupes_2.items():
+        for path in paths:
+            try:
+                h = hashlib.md5()
+                with open(path, 'rb') as f:
+                    for chunk in iter(lambda: f.read(4096), b""):
+                        h.update(chunk)
+                full_hash_map.setdefault(h.hexdigest(), []).append(path)
+            except Exception:
+                pass
+                
+    # Format hasil pengembalian
+    for file_hash, paths in full_hash_map.items():
+        if len(paths) > 1:
+            duplicates.append({
+                "hash": file_hash,
+                "size": os.path.getsize(paths[0]),
+                "files": sorted(paths)
+            })
+            
+    return sorted(duplicates, key=lambda x: x['size'] * len(x['files']), reverse=True)
+
+def get_installed_apps():
+    """Mengambil daftar perangkat lunak yang terinstal dari Registry Windows."""
+    apps = []
+    reg_paths = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+    ]
+    
+    seen_names = set()
+    
+    for hive, path in reg_paths:
+        try:
+            key = winreg.OpenKey(hive, path, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            num_subkeys = winreg.QueryInfoKey(key)[0]
+            
+            for i in range(num_subkeys):
+                try:
+                    subkey_name = winreg.EnumKey(key, i)
+                    subkey = winreg.OpenKey(key, subkey_name, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                    
+                    try:
+                        display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                        uninstall_string = winreg.QueryValueEx(subkey, "UninstallString")[0]
+                    except FileNotFoundError:
+                        continue
+                        
+                    if not display_name or display_name in seen_names or "KB" in subkey_name:
+                        continue
+                        
+                    publisher = ""
+                    try:
+                        publisher = winreg.QueryValueEx(subkey, "Publisher")[0]
+                    except FileNotFoundError:
+                        pass
+                        
+                    install_loc = ""
+                    try:
+                        install_loc = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                    except FileNotFoundError:
+                        pass
+                        
+                    seen_names.add(display_name)
+                    apps.append({
+                        "name": display_name,
+                        "uninstall_string": uninstall_string,
+                        "install_location": install_loc,
+                        "publisher": publisher,
+                        "key_name": subkey_name,
+                        "hive": "HKLM" if hive == winreg.HKEY_LOCAL_MACHINE else "HKCU",
+                        "registry_path": f"{path}\\{subkey_name}"
+                    })
+                    winreg.CloseKey(subkey)
+                except Exception:
+                    pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+            
+    return sorted(apps, key=lambda x: x['name'].lower())
+
+def find_app_leftovers(app_name, install_location=None, publisher=None):
+    """Memindai direktori sistem dan Registry untuk mencari jejak sisa aplikasi."""
+    leftovers = {
+        "folders": [],
+        "registry_keys": []
+    }
+    
+    keywords = [app_name.lower()]
+    short_name = app_name.split()[0].lower()
+    if len(short_name) > 2 and short_name not in keywords:
+        keywords.append(short_name)
+        
+    if publisher:
+        pub_short = publisher.split()[0].lower()
+        if len(pub_short) > 2 and pub_short not in keywords:
+            keywords.append(pub_short)
+            
+    # 1. Pemindaian Direktori
+    scan_roots = []
+    localappdata = os.environ.get('LOCALAPPDATA', '')
+    appdata = os.environ.get('APPDATA', '')
+    programfiles = os.environ.get('ProgramFiles', 'C:\\Program Files')
+    programfiles_x86 = os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')
+    
+    if localappdata: scan_roots.append(localappdata)
+    if appdata: scan_roots.append(appdata)
+    if programfiles: scan_roots.append(programfiles)
+    if programfiles_x86: scan_roots.append(programfiles_x86)
+    
+    if install_location and os.path.exists(install_location):
+        leftovers["folders"].append(install_location)
+        
+    for root in scan_roots:
+        if not os.path.exists(root):
+            continue
+        try:
+            for item in os.listdir(root):
+                full_path = os.path.join(root, item)
+                if not os.path.isdir(full_path):
+                    continue
+                item_lower = item.lower()
+                for kw in keywords:
+                    if kw in item_lower:
+                        if full_path not in leftovers["folders"] and full_path not in scan_roots:
+                            leftovers["folders"].append(full_path)
+                            break
+        except Exception:
+            pass
+            
+    # 2. Pemindaian Registry
+    reg_roots = [
+        (winreg.HKEY_CURRENT_USER, r"Software"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software")
+    ]
+    
+    for hive, path in reg_roots:
+        try:
+            key = winreg.OpenKey(hive, path, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            num_subkeys = winreg.QueryInfoKey(key)[0]
+            
+            for i in range(num_subkeys):
+                try:
+                    subkey_name = winreg.EnumKey(key, i)
+                    subkey_lower = subkey_name.lower()
+                    
+                    for kw in keywords:
+                        if kw in subkey_lower:
+                            hive_name = "HKCU" if hive == winreg.HKEY_CURRENT_USER else "HKLM"
+                            full_reg_path = f"{hive_name}\\{path}\\{subkey_name}"
+                            if full_reg_path not in leftovers["registry_keys"]:
+                                leftovers["registry_keys"].append(full_reg_path)
+                            break
+                except Exception:
+                    pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+            
+    return leftovers
+
+def delete_app_leftovers(folders, registry_keys):
+    """Menghapus folder dan subkey registry sisa uninstall."""
+    deleted_folders = 0
+    deleted_registry = 0
+    
+    # Hapus Folder
+    for f in folders:
+        if os.path.exists(f) and os.path.isdir(f):
+            try:
+                shutil.rmtree(f)
+                deleted_folders += 1
+            except Exception:
+                pass
+                
+    # Hapus Registry Keys
+    for rkey in registry_keys:
+        try:
+            parts = rkey.split('\\')
+            hive_name = parts[0]
+            path = "\\".join(parts[1:-1])
+            subkey_name = parts[-1]
+            
+            hive = winreg.HKEY_CURRENT_USER if hive_name == "HKCU" else winreg.HKEY_LOCAL_MACHINE
+            
+            def delete_key_recursive(parent_hive, parent_path, key_to_delete):
+                try:
+                    h_key = winreg.OpenKey(parent_hive, f"{parent_path}\\{key_to_delete}", 0, winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY)
+                except Exception:
+                    return False
+                    
+                while True:
+                    try:
+                        sub = winreg.EnumKey(h_key, 0)
+                        delete_key_recursive(parent_hive, f"{parent_path}\\{key_to_delete}", sub)
+                    except OSError:
+                        break
+                winreg.CloseKey(h_key)
+                
+                try:
+                    winreg.DeleteKey(parent_hive, f"{parent_path}\\{key_to_delete}")
+                    return True
+                except Exception:
+                    return False
+                    
+            if delete_key_recursive(hive, path, subkey_name):
+                deleted_registry += 1
+        except Exception:
+            pass
+            
+    return deleted_folders, deleted_registry
+

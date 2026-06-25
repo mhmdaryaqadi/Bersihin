@@ -41,6 +41,12 @@ def _get_local_db():
                     "last_active": time.time(),
                     "password_hash": "admin123" # Simulasi sandi sederhana
                 }
+            },
+            "commands": {},
+            "app_settings": {
+                "version": "1.0.0",
+                "update_url": "https://github.com/mhmdaryaqadi/Bersihin/releases",
+                "broadcast_message": ""
             }
         }
         _save_local_db(default_db)
@@ -623,4 +629,166 @@ def login_mock_google(email, is_admin_requested=False):
             "status": "active",
             "idToken": "local_token_google_123"
         }, None
+
+
+# ----------------- FITUR PREMIUM (REMOTE COMMANDS, BROADCAST, ANALYTICS, UPDATER) -----------------
+
+def get_update_config():
+    """Mengambil konfigurasi pembaruan aplikasi."""
+    if is_mock_mode():
+        db = _get_local_db()
+        return db.get("app_settings", {"version": "1.0.0", "update_url": "", "broadcast_message": ""}), None
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/app_settings.json"
+        res, err = _make_rest_call(url, method='GET')
+        if err or not res:
+            return {"version": "1.0.0", "update_url": "", "broadcast_message": ""}, err
+        return res, None
+
+def set_update_config(admin_token, version, update_url):
+    """Menyetel konfigurasi pembaruan oleh Admin."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "app_settings" not in db:
+            db["app_settings"] = {}
+        db["app_settings"]["version"] = version
+        db["app_settings"]["update_url"] = update_url
+        _save_local_db(db)
+        return True
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/app_settings.json?auth={admin_token}"
+        _, err = _make_rest_call(url, {"version": version, "update_url": update_url}, 'PATCH')
+        return err is None
+
+def get_broadcast_message():
+    """Mengambil pesan siaran aktif."""
+    if is_mock_mode():
+        db = _get_local_db()
+        return db.get("app_settings", {}).get("broadcast_message", ""), None
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/app_settings/broadcast_message.json"
+        msg, err = _make_rest_call(url, method='GET')
+        return msg, err
+
+def set_broadcast_message(admin_token, message):
+    """Menyetel pesan siaran oleh Admin."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "app_settings" not in db:
+            db["app_settings"] = {}
+        db["app_settings"]["broadcast_message"] = message
+        _save_local_db(db)
+        return True
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/app_settings.json?auth={admin_token}"
+        _, err = _make_rest_call(url, {"broadcast_message": message}, 'PATCH')
+        return err is None
+
+def check_remote_commands(uid, id_token):
+    """Memeriksa apakah ada perintah jarak jauh untuk user ini."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "commands" not in db:
+            db["commands"] = {}
+        return db["commands"].get(uid, {}), None
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/commands/{uid}.json?auth={id_token}"
+        res, err = _make_rest_call(url, method='GET')
+        if err or not res:
+            return {}, err
+        return res, None
+
+def write_remote_command(admin_token, target_uid, cmd_type, value):
+    """Menulis perintah jarak jauh untuk user tertentu (oleh Admin)."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "commands" not in db:
+            db["commands"] = {}
+        if target_uid not in db["commands"]:
+            db["commands"][target_uid] = {}
+        db["commands"][target_uid][cmd_type] = value
+        # Hapus respon lama jika ada perintah baru
+        if "response" in db["commands"][target_uid]:
+            del db["commands"][target_uid]["response"]
+        _save_local_db(db)
+        return True
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/commands/{target_uid}.json?auth={admin_token}"
+        # Kirim update dan hapus respon lama
+        _, err = _make_rest_call(url, {cmd_type: value}, 'PATCH')
+        if not err:
+            resp_url = f"{firebase_config.DATABASE_URL.rstrip('/')}/commands/{target_uid}/response.json?auth={admin_token}"
+            _make_rest_call(resp_url, method='DELETE')
+        return err is None
+
+def clear_remote_command(uid, id_token, cmd_type):
+    """Menghapus/menyetel ulang perintah jarak jauh setelah diproses."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "commands" in db and uid in db["commands"] and cmd_type in db["commands"][uid]:
+            db["commands"][uid][cmd_type] = False
+            _save_local_db(db)
+            return True
+        return False
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/commands/{uid}/{cmd_type}.json?auth={id_token}"
+        _, err = _make_rest_call(url, False, 'PUT')
+        return err is None
+
+def respond_to_remote_command(uid, id_token, response_dict):
+    """Mengirim respon dari perintah jarak jauh kembali ke database."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "commands" not in db:
+            db["commands"] = {}
+        if uid not in db["commands"]:
+            db["commands"][uid] = {}
+        db["commands"][uid]["response"] = response_dict
+        _save_local_db(db)
+        return True
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/commands/{uid}/response.json?auth={id_token}"
+        _, err = _make_rest_call(url, response_dict, 'PUT')
+        return err is None
+
+def get_global_analytics(admin_token):
+    """Menghitung data analitik agregasi dari seluruh user."""
+    users, err = get_all_users_data(admin_token)
+    if err or not users:
+        return None, err
+        
+    total_users = len(users)
+    total_ram_cleaned = 0
+    total_disk_cleaned = 0
+    active_users = 0
+    os_dist = {}
+    
+    current_time = time.time()
+    for uid, uinfo in users.items():
+        total_ram_cleaned += uinfo.get('ram_cleaned_mb', 0)
+        total_disk_cleaned += uinfo.get('disk_cleaned_mb', 0)
+        
+        # Anggap aktif jika ada aktivitas dalam 10 menit terakhir
+        if current_time - uinfo.get('last_active', 0) < 600:
+            active_users += 1
+            
+        os_name = uinfo.get('os', 'Unknown')
+        if 'Windows' in os_name:
+            if '11' in os_name:
+                os_key = 'Windows 11'
+            elif '10' in os_name:
+                os_key = 'Windows 10'
+            else:
+                os_key = 'Windows Lain'
+        else:
+            os_key = os_name
+        os_dist[os_key] = os_dist.get(os_key, 0) + 1
+        
+    return {
+        "total_users": total_users,
+        "active_users": active_users,
+        "total_ram_cleaned_gb": total_ram_cleaned / 1024.0,
+        "total_disk_cleaned_gb": total_disk_cleaned / 1024.0,
+        "os_distribution": os_dist
+    }, None
 

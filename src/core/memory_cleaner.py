@@ -165,3 +165,51 @@ def get_top_processes(limit=10):
     # Sort by memory descending
     processes.sort(key=lambda x: x['memory'], reverse=True)
     return processes[:limit]
+
+
+# ================= FITUR PREMIUM: GAME BOOSTER =================
+
+def set_process_priority_high(pid):
+    """Meningkatkan prioritas proses game menjadi High."""
+    try:
+        p = psutil.Process(pid)
+        p.nice(psutil.HIGH_PRIORITY_CLASS)
+        return True
+    except Exception:
+        return False
+
+def suspend_non_essential_processes(exclude_pids=None):
+    """Menangguhkan sementara proses berat non-kritis (browser/spotify/discord) untuk menghemat RAM."""
+    if exclude_pids is None:
+        exclude_pids = []
+        
+    targets = ["chrome.exe", "msedge.exe", "firefox.exe", "spotify.exe", "discord.exe"]
+    suspended_pids = []
+    
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            pid = proc.info['pid']
+            name = proc.info['name'].lower()
+            if pid in exclude_pids:
+                continue
+            if name in targets:
+                p = psutil.Process(pid)
+                p.suspend()
+                suspended_pids.append(pid)
+        except Exception:
+            pass
+            
+    return suspended_pids
+
+def resume_processes(pid_list):
+    """Melanjutkan kembali proses yang sebelumnya ditangguhkan."""
+    resumed_count = 0
+    for pid in pid_list:
+        try:
+            p = psutil.Process(pid)
+            p.resume()
+            resumed_count += 1
+        except Exception:
+            pass
+    return resumed_count
+
