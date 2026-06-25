@@ -348,7 +348,7 @@ class AdminUsersFrame(ctk.CTkFrame):
         self.setup_detail_ui()
  
     def setup_detail_ui(self):
-        self.detail_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        self.detail_frame = ctk.CTkScrollableFrame(self.right_panel, fg_color="transparent")
         
         # Detail Title
         self.lbl_detail_title = ctk.CTkLabel(
@@ -359,7 +359,7 @@ class AdminUsersFrame(ctk.CTkFrame):
         self.lbl_detail_title.pack(anchor="w", pady=(15, 10))
         
         # Detail items container
-        self.details_container = ctk.CTkScrollableFrame(self.detail_frame, fg_color="#121212", corner_radius=8, height=180)
+        self.details_container = ctk.CTkFrame(self.detail_frame, fg_color="#121212", corner_radius=8)
         self.details_container.pack(fill="x", pady=(0, 10))
         
         # Details Fields
@@ -838,19 +838,26 @@ class AdminAnalyticsFrame(ctk.CTkFrame):
         self.card_total_ram.configure(text=f"{data['total_ram_cleaned_gb']:.1f} GB")
         self.card_total_disk.configure(text=f"{data['total_disk_cleaned_gb']:.1f} GB")
         
+        # Ensure widget dimensions are updated
+        self.canvas_os.update_idletasks()
+        self.canvas_perf.update_idletasks()
+        
         # 1. Draw OS Distribution Chart
         self.canvas_os.delete("all")
         os_data = data.get("os_distribution", {})
         if os_data:
+            canvas_width = max(self.canvas_os.winfo_width(), 300)
+            bar_max_width = max(canvas_width - 180, 100)
+            
             max_val = max(os_data.values()) if os_data.values() else 1
             y_offset = 20
             bar_height = 20
             
             for os_name, count in os_data.items():
                 ratio = count / max_val
-                bar_width = int(ratio * 160)
+                bar_width = int(ratio * bar_max_width)
                 
-                self.canvas_os.create_text(10, y_offset + 10, text=f"{os_name}: {count}", fill="#FFFFFF", anchor="w", font=("Segoe UI", 10))
+                self.canvas_os.create_text(10, y_offset + 10, text=f"{os_name}: {count}", fill="#FFFFFF", anchor="w", font=("Segoe UI", 10, "bold"))
                 self.canvas_os.create_rectangle(140, y_offset, 140 + bar_width, y_offset + bar_height, fill="#3B82F6", outline="")
                 
                 y_offset += 35
@@ -862,17 +869,30 @@ class AdminAnalyticsFrame(ctk.CTkFrame):
         
         max_gb = max(ram_gb, disk_gb, 1)
         
+        canvas_width = max(self.canvas_perf.winfo_width(), 300)
+        canvas_height = max(self.canvas_perf.winfo_height(), 180)
+        
+        bar_width = 50
+        spacing = 60
+        total_width = (bar_width * 2) + spacing
+        start_x = (canvas_width - total_width) // 2
+        
+        ram_x = start_x
+        disk_x = start_x + bar_width + spacing
+        
+        max_bar_height = canvas_height - 60
+        ram_height = int((ram_gb / max_gb) * max_bar_height)
+        disk_height = int((disk_gb / max_gb) * max_bar_height)
+        
         # RAM Bar
-        ram_height = int((ram_gb / max_gb) * 120)
-        self.canvas_perf.create_rectangle(60, 140 - ram_height, 100, 140, fill="#3B82F6", outline="")
-        self.canvas_perf.create_text(80, 152, text="RAM", fill="#FFFFFF", font=("Segoe UI", 10, "bold"))
-        self.canvas_perf.create_text(80, 130 - ram_height, text=f"{ram_gb:.1f} GB", fill="#3B82F6", font=("Segoe UI", 10, "bold"))
+        self.canvas_perf.create_rectangle(ram_x, canvas_height - 40 - ram_height, ram_x + bar_width, canvas_height - 40, fill="#3B82F6", outline="")
+        self.canvas_perf.create_text(ram_x + bar_width/2, canvas_height - 25, text="RAM", fill="#FFFFFF", font=("Segoe UI", 10, "bold"))
+        self.canvas_perf.create_text(ram_x + bar_width/2, canvas_height - 52 - ram_height, text=f"{ram_gb:.1f} GB", fill="#3B82F6", font=("Segoe UI", 10, "bold"))
         
         # Disk Bar
-        disk_height = int((disk_gb / max_gb) * 120)
-        self.canvas_perf.create_rectangle(150, 140 - disk_height, 190, 140, fill="#475569", outline="")
-        self.canvas_perf.create_text(170, 152, text="Disk", fill="#FFFFFF", font=("Segoe UI", 10, "bold"))
-        self.canvas_perf.create_text(170, 130 - disk_height, text=f"{disk_gb:.1f} GB", fill="#CCCCCC", font=("Segoe UI", 10, "bold"))
+        self.canvas_perf.create_rectangle(disk_x, canvas_height - 40 - disk_height, disk_x + bar_width, canvas_height - 40, fill="#475569", outline="")
+        self.canvas_perf.create_text(disk_x + bar_width/2, canvas_height - 25, text="Disk", fill="#FFFFFF", font=("Segoe UI", 10, "bold"))
+        self.canvas_perf.create_text(disk_x + bar_width/2, canvas_height - 52 - disk_height, text=f"{disk_gb:.1f} GB", fill="#CCCCCC", font=("Segoe UI", 10, "bold"))
 
 class AdminGlobalSettingsFrame(ctk.CTkFrame):
     """Premium tab managing global application update versions and broadcast messaging."""
@@ -1055,8 +1075,8 @@ class AdminApp(ctk.CTk):
         
         # Window settings
         self.title("Bersihin - Dashboard Administrator")
-        self.geometry("980x600")
-        self.resizable(False, False)
+        self.geometry("1280x720")
+        self.resizable(True, True)
         
         # Icon loading
         try:

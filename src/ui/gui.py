@@ -12,6 +12,14 @@ import subprocess
 import datetime
 import psutil
 
+# Import pystray for system tray
+try:
+    import pystray
+    from PIL import Image
+    HAS_PYSTRAY = True
+except ImportError:
+    HAS_PYSTRAY = False
+
 # Import our backend modules
 import memory_cleaner
 import file_cleaner
@@ -1319,8 +1327,17 @@ class DuplicateFinderFrame(ctk.CTkFrame):
                 cb_var = tk.BooleanVar(value=(file_idx > 0))
                 self.checkbox_vars[filepath] = cb_var
                 
+                # Truncate long path for clean display
+                display_path = filepath
+                if len(filepath) > 85:
+                    parts = filepath.split(os.sep)
+                    if len(parts) > 3:
+                        display_path = parts[0] + os.sep + "..." + os.sep + os.sep.join(parts[-2:])
+                    else:
+                        display_path = filepath[:40] + "..." + filepath[-40:]
+                        
                 cb = ctk.CTkCheckBox(
-                    file_row, text=filepath, variable=cb_var,
+                    file_row, text=display_path, variable=cb_var,
                     font=ctk.CTkFont(size=11),
                     checkbox_width=18, checkbox_height=18, corner_radius=4
                 )
@@ -1829,8 +1846,13 @@ class App(ctk.CTk):
         
         # Window properties
         self.title("Bersihin")
-        self.geometry("820x540")
-        self.resizable(False, False)
+        self.geometry("1280x720")
+        self.resizable(True, True)
+        
+        # Intercept window close to minimize to tray
+        self.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        self.tray_icon = None
+        self.setup_tray_icon()
         
         # Custom Icon (if available, fallback to standard)
         try:
@@ -1863,6 +1885,68 @@ class App(ctk.CTk):
             self.initialize_main_app(start_minimized)
         else:
             self.show_login_screen()
+
+    def setup_tray_icon(self):
+        """Set up the system tray icon using pystray."""
+        if not HAS_PYSTRAY:
+            return
+            
+        try:
+            # Determine logo path
+            if getattr(sys, 'frozen', False):
+                png_path = os.path.join(sys._MEIPASS, "assets", "logo.png")
+            else:
+                base_project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+                png_path = os.path.join(base_project_dir, "assets", "logo.png")
+                
+            if not os.path.exists(png_path):
+                return
+                
+            image = Image.open(png_path)
+            
+            def restore_window(icon, item):
+                self.after(0, self.restore_from_tray)
+                
+            def exit_app(icon, item):
+                self.after(0, self.exit_app_fully)
+                
+            menu = pystray.Menu(
+                pystray.MenuItem("Buka Bersihin", restore_window, default=True),
+                pystray.MenuItem("Keluar Aplikasi", exit_app)
+            )
+            self.tray_icon = pystray.Icon("Bersihin", image, "Bersihin", menu)
+            
+            # Start tray icon running in a background thread
+            threading.Thread(target=self.tray_icon.run, daemon=True).start()
+        except Exception:
+            pass
+
+    def minimize_to_tray(self):
+        """Hides the window and runs it in the system tray."""
+        if HAS_PYSTRAY and self.tray_icon:
+            self.withdraw()
+        else:
+            self.exit_app_fully()
+
+    def restore_from_tray(self):
+        """Restores the window from system tray."""
+        self.deiconify()
+        self.focus_force()
+        self.state("normal")
+
+    def exit_app_fully(self):
+        """Fully closes the application and stops the tray icon."""
+        if HAS_PYSTRAY and self.tray_icon:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+        self.destroy()
+        sys.exit(0)
+
+    def quit(self):
+        """Override quit to exit fully including tray icon thread."""
+        self.exit_app_fully()
 
     def show_login_screen(self):
         """Cleans window and displays the Login / Register screen."""

@@ -203,6 +203,27 @@ def get_clean_targets():
             
     return targets
 
+def scan_folder(folder_path):
+    """Calculates the total size in bytes and count of files in a single pass."""
+    total_size = 0
+    total_files = 0
+    if not os.path.exists(folder_path):
+        return 0, 0
+        
+    try:
+        for dirpath, _, filenames in os.walk(folder_path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    try:
+                        total_size += os.path.getsize(fp)
+                        total_files += 1
+                    except (OSError, PermissionError):
+                        pass
+    except Exception:
+        pass
+    return total_size, total_files
+
 def scan_target(key, target_info):
     """Scans a single target and returns its total size in bytes and file count."""
     if 'special' in target_info:
@@ -219,13 +240,9 @@ def scan_target(key, target_info):
     
     for path in target_info['paths']:
         if os.path.exists(path):
-            total_size += get_folder_size(path)
-            # Count files
-            try:
-                for _, _, filenames in os.walk(path):
-                    total_files += len(filenames)
-            except Exception:
-                pass
+            size, count = scan_folder(path)
+            total_size += size
+            total_files += count
                 
     return total_size, total_files
 
