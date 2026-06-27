@@ -2612,11 +2612,16 @@ class RegistryCleanerFrame(ctk.CTkFrame):
     def run_scan(self):
         self.btn_scan.configure(state="disabled", text="Memindai...")
         self.btn_clean.configure(state="disabled")
-        self.lbl_status.configure(text="Sedang memindai Registry Windows...")
-        self.controller.show_status("Memindai masalah Registry...")
         
         for w in self.scroll_frame.winfo_children():
             w.destroy()
+            
+        self.lbl_status = ctk.CTkLabel(
+            self.scroll_frame, text="Sedang memindai Registry Windows...",
+            font=ctk.CTkFont(size=13), text_color="#888888"
+        )
+        self.lbl_status.pack(pady=50)
+        self.controller.show_status("Memindai masalah Registry...")
         self.checkbox_vars = {}
         
         def worker():
