@@ -1396,24 +1396,36 @@ class DuplicateFinderFrame(ctk.CTkFrame):
         def delete_worker():
             deleted_count = 0
             freed_bytes = 0
+            failed_count = 0
+            import stat
             for path in files_to_delete:
                 try:
                     size = os.path.getsize(path)
+                    # Hapus atribut read-only jika ada agar bisa dihapus
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                    except Exception:
+                        pass
                     os.remove(path)
                     deleted_count += 1
                     freed_bytes += size
                 except Exception:
-                    pass
-            self.after(0, lambda count=deleted_count, size=freed_bytes: self.finish_deletion(count, size))
+                    failed_count += 1
+            self.after(0, lambda count=deleted_count, size=freed_bytes, failed=failed_count: 
+                       self.finish_deletion(count, size, failed))
             
         threading.Thread(target=delete_worker, daemon=True).start()
         
-    def finish_deletion(self, count, freed_bytes):
+    def finish_deletion(self, count, freed_bytes, failed_count=0):
         self.btn_scan.configure(state="normal")
         to_mb = lambda b: f"{b / (1024*1024):.2f} MB" if b >= 1024*1024 else f"{b / 1024:.1f} KB"
         freed_str = to_mb(freed_bytes)
         
-        messagebox.showinfo("Penghapusan Selesai", f"Berhasil menghapus {count} file duplikat dan membebaskan {freed_str} ruang disk.")
+        msg = f"Berhasil menghapus {count} file duplikat dan membebaskan {freed_str} ruang disk."
+        if failed_count > 0:
+            msg += f"\n\nPerhatian: {failed_count} file gagal dihapus (kemungkinan sedang terkunci atau butuh hak akses Administrator lebih tinggi)."
+            
+        messagebox.showinfo("Penghapusan Selesai", msg)
         self.controller.show_status(f"Duplikat dibersihkan: Bebas {freed_str}.")
         
         # Kirim laporan performa ke Firebase
