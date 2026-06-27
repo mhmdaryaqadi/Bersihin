@@ -5,7 +5,7 @@ import subprocess
 import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
-from PIL import Image
+from PIL import Image, ImageTk
 
 # Set dark theme
 ctk.set_appearance_mode("Dark")
@@ -32,6 +32,22 @@ class InstallerApp(ctk.CTk):
         else:
             self.src_folder = os.path.abspath("Bersihin")
             self.logo_path = os.path.abspath(os.path.join("assets", "logo.png"))
+            
+        # Set Windows AppUserModelID for taskbar grouping
+        import ctypes
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("antigravity.bersihin.setup.v1")
+        except Exception:
+            pass
+            
+        # Set window icon and taskbar icon
+        if os.path.exists(self.logo_path):
+            try:
+                img_pil = Image.open(self.logo_path)
+                self.img_icon = ImageTk.PhotoImage(img_pil)
+                self.iconphoto(True, self.img_icon)
+            except Exception as e:
+                print("Failed to set window icon:", e)
             
         # Default Install Path: Program Files
         program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
@@ -307,6 +323,15 @@ class InstallerApp(ctk.CTk):
         
     def do_copy_files(self):
         try:
+            self.progress.set(0.1)
+            self.lbl_progress.configure(text="Menghentikan aplikasi jika sedang berjalan...")
+            
+            # Close running Bersihin.exe instances to avoid lock errors
+            try:
+                subprocess.run(["taskkill", "/f", "/im", "Bersihin.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            except Exception:
+                pass
+                
             self.progress.set(0.2)
             self.lbl_progress.configure(text="Membuat direktori tujuan...")
             os.makedirs(self.install_path, exist_ok=True)
@@ -319,14 +344,28 @@ class InstallerApp(ctk.CTk):
                 self.destroy()
                 return
                 
+            import stat
             for item in os.listdir(self.src_folder):
                 s = os.path.join(self.src_folder, item)
                 d = os.path.join(self.install_path, item)
                 if os.path.isdir(s):
                     if os.path.exists(d):
-                        shutil.rmtree(d)
+                        # Reset read-only attribute recursively to avoid PermissionError
+                        for root, dirs, files in os.walk(d):
+                            for file in files:
+                                p = os.path.join(root, file)
+                                try:
+                                    os.chmod(p, stat.S_IWRITE)
+                                except Exception:
+                                    pass
+                        shutil.rmtree(d, ignore_errors=True)
                     shutil.copytree(s, d)
                 else:
+                    if os.path.exists(d):
+                        try:
+                            os.chmod(d, stat.S_IWRITE)
+                        except Exception:
+                            pass
                     shutil.copy2(s, d)
                     
             self.progress.set(0.7)
