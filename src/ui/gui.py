@@ -2153,6 +2153,13 @@ class App(ctk.CTk):
         )
         self.status_lbl.pack(side="left", padx=15)
         
+        self.credits_lbl = ctk.CTkLabel(
+            self.status_bar, text="Created by Arya AL | v1.0.0",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color="#888888"
+        )
+        self.credits_lbl.pack(side="right", padx=15)
+        
         # Load and stack screen frames
         self.frames = {}
         for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, AppManagerFrame, 
