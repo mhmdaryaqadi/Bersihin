@@ -29,9 +29,11 @@ class InstallerApp(ctk.CTk):
         if getattr(sys, 'frozen', False):
             self.src_folder = os.path.join(sys._MEIPASS, "Bersihin")
             self.logo_path = os.path.join(sys._MEIPASS, "assets", "logo.png")
+            self.ico_path = os.path.join(sys._MEIPASS, "assets", "logo.ico")
         else:
             self.src_folder = os.path.abspath("Bersihin")
             self.logo_path = os.path.abspath(os.path.join("assets", "logo.png"))
+            self.ico_path = os.path.abspath(os.path.join("assets", "logo.ico"))
             
         # Set Windows AppUserModelID for taskbar grouping
         import ctypes
@@ -40,12 +42,10 @@ class InstallerApp(ctk.CTk):
         except Exception:
             pass
             
-        # Set window icon and taskbar icon
-        if os.path.exists(self.logo_path):
+        # Set window icon and taskbar icon (.ico format is required for Windows taskbar and titlebar)
+        if os.path.exists(self.ico_path):
             try:
-                img_pil = Image.open(self.logo_path)
-                self.img_icon = ImageTk.PhotoImage(img_pil)
-                self.iconphoto(True, self.img_icon)
+                self.iconbitmap(self.ico_path)
             except Exception as e:
                 print("Failed to set window icon:", e)
             
@@ -326,12 +326,32 @@ class InstallerApp(ctk.CTk):
             self.progress.set(0.1)
             self.lbl_progress.configure(text="Menghentikan aplikasi jika sedang berjalan...")
             
-            # Close running Bersihin.exe instances to avoid lock errors
+            # Close running Bersihin.exe instances and any process running from the target path using psutil
+            try:
+                import psutil
+                for proc in psutil.process_iter(['name', 'exe']):
+                    try:
+                        # Kill by name
+                        if proc.info['name'] and proc.info['name'].lower() == "bersihin.exe":
+                            proc.kill()
+                        # Kill any process running from the target path
+                        elif proc.info['exe'] and self.install_path.lower() in proc.info['exe'].lower():
+                            proc.kill()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+                
+            # Also run a taskkill command for Bersihin.exe just to be safe
             try:
                 subprocess.run(["taskkill", "/f", "/im", "Bersihin.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception:
                 pass
                 
+            # Wait a moment for Windows to release file handles
+            import time
+            time.sleep(1.5)
+            
             self.progress.set(0.2)
             self.lbl_progress.configure(text="Membuat direktori tujuan...")
             os.makedirs(self.install_path, exist_ok=True)

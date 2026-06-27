@@ -26,6 +26,7 @@ def build_setup():
         "--icon=assets/logo.ico",
         "--add-data=Bersihin;Bersihin",
         "--add-data=assets/logo.png;assets",
+        "--add-data=assets/logo.ico;assets",
         "--paths=src",
         "--collect-all=customtkinter",
         "installer.py"
