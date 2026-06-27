@@ -1085,6 +1085,7 @@ class AdminApp(ctk.CTk):
         self.title("Bersihin - Dashboard Administrator")
         self.geometry("1280x720")
         self.resizable(True, True)
+        self.minsize(960, 540)
         
         # Icon loading
         try:

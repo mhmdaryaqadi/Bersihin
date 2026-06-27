@@ -1904,6 +1904,7 @@ class App(ctk.CTk):
         self.title("Bersihin")
         self.geometry("1280x720")
         self.resizable(True, True)
+        self.minsize(960, 540)
         
         # Intercept window close to minimize to tray
         self.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
