@@ -1535,9 +1535,13 @@ class AppManagerFrame(ctk.CTkFrame):
         self.startup_scroll.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
         self.startup_scroll.grid_columnconfigure(0, weight=1)
         
-        # Initial loads
-        self.load_startup_entries()
-        self.load_installed_apps()
+        self.apps_loaded = False
+
+    def on_show(self):
+        if not self.apps_loaded:
+            self.apps_loaded = True
+            self.load_installed_apps()
+            self.load_startup_entries()
 
     def filter_installed_apps(self, event=None):
         q = self.search_entry.get().strip().lower()
@@ -1592,22 +1596,27 @@ class AppManagerFrame(ctk.CTkFrame):
             return
             
         for app in self.apps_list:
-            row = ctk.CTkFrame(self.app_scroll, fg_color="#1E1E1E", height=50)
+            # Use high-performance standard tk.Frame to prevent resize/drawing lag
+            row = tk.Frame(self.app_scroll, bg="#1E1E1E", height=50)
             row.pack(fill="x", pady=4, padx=5)
             row.pack_propagate(False)
             
-            lbl_name = ctk.CTkLabel(
-                row, text=app['name'], font=ctk.CTkFont(size=12, weight="bold"),
-                anchor="w"
+            row.grid_columnconfigure(0, weight=1)
+            row.grid_columnconfigure(1, weight=0)
+            
+            # Use standard tk.Label for instant rendering (saves seconds on long lists)
+            lbl_name = tk.Label(
+                row, text=app['name'], font=("Segoe UI", 10, "bold"),
+                fg="#FFFFFF", bg="#1E1E1E", anchor="w"
             )
-            lbl_name.pack(side="left", padx=15, fill="x", expand=True)
+            lbl_name.grid(row=0, column=0, padx=15, pady=10, sticky="w")
             
             btn_uninstall = ctk.CTkButton(
                 row, text="Uninstall", font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
                 width=80, height=28, command=lambda a=app: self.confirm_uninstall(a)
             )
-            btn_uninstall.pack(side="right", padx=15, pady=10)
+            btn_uninstall.grid(row=0, column=1, padx=15, pady=10, sticky="e")
             
             self.app_widgets.append((app['name'].lower(), row))
             
@@ -1845,22 +1854,34 @@ class AppManagerFrame(ctk.CTkFrame):
             return
             
         for entry in self.startup_list:
-            row = ctk.CTkFrame(self.startup_scroll, fg_color="#1E1E1E", height=50)
+            # Use high-performance standard tk.Frame and grid column layout to prevent overlap/overflow
+            row = tk.Frame(self.startup_scroll, bg="#1E1E1E", height=50)
             row.pack(fill="x", pady=4, padx=5)
             row.pack_propagate(False)
             
-            lbl_name = ctk.CTkLabel(
-                row, text=entry['name'], font=ctk.CTkFont(size=12, weight="bold"),
-                anchor="w"
-            )
-            lbl_name.pack(side="left", padx=15, fill="x", expand=True)
+            row.grid_columnconfigure(0, weight=3, uniform="startup")
+            row.grid_columnconfigure(1, weight=5, uniform="startup")
+            row.grid_columnconfigure(2, weight=0)
+            row.grid_rowconfigure(0, weight=1)
             
-            cmd_trunc = entry['command'][:50] + "..." if len(entry['command']) > 50 else entry['command']
-            lbl_cmd = ctk.CTkLabel(
-                row, text=cmd_trunc, font=ctk.CTkFont(size=10, slant="italic"),
-                text_color="#888888", anchor="w"
+            display_name = entry['name']
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
+                
+            lbl_name = tk.Label(
+                row, text=display_name, font=("Segoe UI", 10, "bold"),
+                fg="#FFFFFF", bg="#1E1E1E", anchor="w"
             )
-            lbl_cmd.pack(side="left", padx=10)
+            lbl_name.grid(row=0, column=0, padx=15, sticky="ew")
+            
+            cmd_trunc = entry['command']
+            if len(cmd_trunc) > 55:
+                cmd_trunc = cmd_trunc[:52] + "..."
+            lbl_cmd = tk.Label(
+                row, text=cmd_trunc, font=("Segoe UI", 9, "italic"),
+                fg="#888888", bg="#1E1E1E", anchor="w"
+            )
+            lbl_cmd.grid(row=0, column=1, padx=10, sticky="ew")
             
             sw_var = tk.BooleanVar(value=entry['enabled'])
             
@@ -1871,7 +1892,7 @@ class AppManagerFrame(ctk.CTkFrame):
                 row, text="", variable=sw_var, command=toggle_startup_entry,
                 progress_color="#3B82F6"
             )
-            sw.pack(side="right", padx=15, pady=10)
+            sw.grid(row=0, column=2, padx=15, sticky="e")
 
     def set_startup_entry_status(self, name, command, enabled):
         reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -2149,6 +2170,10 @@ class App(ctk.CTk):
                 btn.configure(fg_color="#1E1E1E", text_color="#3B82F6")
             else:
                 btn.configure(fg_color="transparent", text_color="#CCCCCC")
+                
+        # Trigger lazy load if applicable (prevents lag on startup)
+        if hasattr(frame, "on_show"):
+            frame.on_show()
 
     def show_status(self, text):
         db_mode = "Offline (Lokal)" if firebase_handler.is_mock_mode() else "Online (Firebase)"
