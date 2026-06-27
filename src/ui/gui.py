@@ -1260,6 +1260,24 @@ class DuplicateFinderFrame(ctk.CTkFrame):
         self.btn_delete_selected.pack(side="right")
         self.btn_delete_selected.configure(state="disabled")
         
+        self.btn_select_all = ctk.CTkButton(
+            self.bottom_bar, text="Pilih Semua Salinan",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#475569", hover_color="#334155", text_color="#FFFFFF",
+            width=160, height=40, command=self.select_all_copies
+        )
+        self.btn_select_all.pack(side="left", padx=(0, 10))
+        self.btn_select_all.configure(state="disabled")
+        
+        self.btn_deselect_all = ctk.CTkButton(
+            self.bottom_bar, text="Batal Pilih",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#333333", hover_color="#444444", text_color="#FFFFFF",
+            width=100, height=40, command=self.deselect_all
+        )
+        self.btn_deselect_all.pack(side="left")
+        self.btn_deselect_all.configure(state="disabled")
+        
     def choose_folder(self):
         folder = filedialog.askdirectory(title="Pilih Folder yang Akan Dipindai")
         if folder:
@@ -1271,6 +1289,8 @@ class DuplicateFinderFrame(ctk.CTkFrame):
         self.btn_scan.configure(state="disabled", text="Memindai...")
         self.btn_choose.configure(state="disabled")
         self.btn_delete_selected.configure(state="disabled")
+        self.btn_select_all.configure(state="disabled")
+        self.btn_deselect_all.configure(state="disabled")
         self.lbl_no_dupes.configure(text="Sedang memindai file duplikat (mengalkulasi hash)...")
         self.controller.show_status("Menganalisis file duplikat...")
         
@@ -1298,10 +1318,14 @@ class DuplicateFinderFrame(ctk.CTkFrame):
             )
             self.lbl_no_dupes.pack(pady=50)
             self.btn_delete_selected.configure(state="disabled")
+            self.btn_select_all.configure(state="disabled")
+            self.btn_deselect_all.configure(state="disabled")
             self.controller.show_status("Pemindaian selesai: Tidak ada duplikat.")
             return
             
         self.btn_delete_selected.configure(state="normal")
+        self.btn_select_all.configure(state="normal")
+        self.btn_deselect_all.configure(state="normal")
         self.controller.show_status(f"Pemindaian selesai: Menemukan {len(duplicates)} grup duplikat.")
         
         to_mb = lambda b: f"{b / (1024*1024):.2f} MB" if b >= 1024*1024 else f"{b / 1024:.1f} KB"
@@ -1406,6 +1430,20 @@ class DuplicateFinderFrame(ctk.CTkFrame):
         
         self.run_scan()
 
+    def select_all_copies(self):
+        """Checks all duplicate files (except the first original one in each group)."""
+        if not self.dupes_list:
+            return
+        for group in self.dupes_list:
+            for file_idx, filepath in enumerate(group['files']):
+                if filepath in self.checkbox_vars:
+                    self.checkbox_vars[filepath].set(file_idx > 0)
+                    
+    def deselect_all(self):
+        """Unchecks all files."""
+        for var in self.checkbox_vars.values():
+            var.set(False)
+ 
 class AppManagerFrame(ctk.CTkFrame):
     """Premium tab representing Software Uninstaller (Basic/Advanced) and Registry Startup Manager."""
     def __init__(self, parent, controller):
@@ -2070,7 +2108,6 @@ class App(ctk.CTk):
         for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, DuplicateFinderFrame, AppManagerFrame, SettingsFrame):
             frame = F(self.container, self)
             self.frames[F] = frame
-            frame.grid(row=0, column=0, sticky="nsew")
             
         # Set default active frame
         self.show_frame(DashboardFrame)
@@ -2098,9 +2135,12 @@ class App(ctk.CTk):
         self.nav_buttons[frame_class] = btn
 
     def show_frame(self, frame_class):
-        """Pushes the selected frame to the top and highlights the active button."""
+        """Hides all frames from the grid, then grids only the active frame."""
+        for f in self.frames.values():
+            f.grid_forget()
+            
         frame = self.frames[frame_class]
-        frame.tkraise()
+        frame.grid(row=0, column=0, sticky="nsew")
         
         # Highlight active nav button
         for cls, btn in self.nav_buttons.items():

@@ -1169,7 +1169,6 @@ class AdminApp(ctk.CTk):
         for F in (AdminUsersFrame, AdminAnalyticsFrame, AdminGlobalSettingsFrame):
             frame = F(self.container, self)
             self.frames[F] = frame
-            frame.grid(row=0, column=0, sticky="nsew")
             
         # Show default frame
         self.show_frame(AdminUsersFrame)
@@ -1186,8 +1185,11 @@ class AdminApp(ctk.CTk):
         self.nav_buttons[frame_class] = btn
  
     def show_frame(self, frame_class):
+        for f in self.frames.values():
+            f.grid_forget()
+            
         frame = self.frames[frame_class]
-        frame.tkraise()
+        frame.grid(row=0, column=0, sticky="nsew")
         
         # Highlight active button
         for cls, btn in self.nav_buttons.items():
