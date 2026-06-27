@@ -30,9 +30,9 @@ class InstallerApp(ctk.CTk):
         else:
             self.src_folder = os.path.abspath("Bersihin")
             
-        # Default Install Path: Local Programs folder
-        local_appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
-        self.default_install_path = os.path.join(local_appdata, "Programs", "Bersihin")
+        # Default Install Path: Program Files folder
+        program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+        self.default_install_path = os.path.join(program_files, "Bersihin")
         
         # Current step: 0 = License, 1 = Options, 2 = Installing, 3 = Finished
         self.current_step = 0

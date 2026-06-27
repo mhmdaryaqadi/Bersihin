@@ -22,6 +22,7 @@ def build_setup():
         "--onefile",
         "--windowed",
         "--name=BersihinSetup",
+        "--uac-admin",
         "--icon=assets/logo.ico",
         "--add-data=Bersihin;Bersihin",
         "--paths=src",
