@@ -193,6 +193,13 @@ def get_clean_targets():
             'paths': [], # Handled by command
             'requires_admin': False,
             'special': 'dns_cache'
+        },
+        'browser_privacy': {
+            'name': 'Riwayat & Cookies Browser',
+            'desc': 'Riwayat penjelajahan dan Cookies dari Google Chrome & Microsoft Edge (Menutup browser otomatis).',
+            'paths': [],
+            'requires_admin': False,
+            'special': 'browser_privacy'
         }
     }
     
@@ -234,6 +241,24 @@ def scan_target(key, target_info):
             # DNS Cache does not take disk space but can be flushed. 
             # We return 1 item if we can access it (symbolic).
             return 0, 1
+        elif target_info['special'] == 'browser_privacy':
+            user_profile = os.environ.get("USERPROFILE", "")
+            targets = [
+                os.path.join(user_profile, r"AppData\Local\Google\Chrome\User Data\Default\History"),
+                os.path.join(user_profile, r"AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"),
+                os.path.join(user_profile, r"AppData\Local\Microsoft\Edge\User Data\Default\History"),
+                os.path.join(user_profile, r"AppData\Local\Microsoft\Edge\User Data\Default\Network\Cookies")
+            ]
+            size = 0
+            count = 0
+            for path in targets:
+                if os.path.exists(path):
+                    try:
+                        size += os.path.getsize(path)
+                        count += 1
+                    except Exception:
+                        pass
+            return size, count
             
     total_size = 0
     total_files = 0
@@ -263,6 +288,42 @@ def clean_target(key, target_info):
                 return 0, 1, 0
             except Exception:
                 return 0, 0, 1
+        elif target_info['special'] == 'browser_privacy':
+            import time
+            import sys
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            import premium_tools
+            running = premium_tools.check_browser_running()
+            if running:
+                premium_tools.force_close_browsers()
+                time.sleep(1) # wait for close
+                
+            user_profile = os.environ.get("USERPROFILE", "")
+            targets = [
+                os.path.join(user_profile, r"AppData\Local\Google\Chrome\User Data\Default\History"),
+                os.path.join(user_profile, r"AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"),
+                os.path.join(user_profile, r"AppData\Local\Microsoft\Edge\User Data\Default\History"),
+                os.path.join(user_profile, r"AppData\Local\Microsoft\Edge\User Data\Default\Network\Cookies")
+            ]
+            
+            total_size = 0
+            deleted = 0
+            failed = 0
+            import stat
+            for path in targets:
+                if os.path.exists(path):
+                    try:
+                        sz = os.path.getsize(path)
+                        try:
+                            os.chmod(path, stat.S_IWRITE)
+                        except Exception:
+                            pass
+                        os.remove(path)
+                        total_size += sz
+                        deleted += 1
+                    except Exception:
+                        failed += 1
+            return total_size, deleted, failed
                 
     total_freed = 0
     total_deleted = 0

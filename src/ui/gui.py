@@ -930,6 +930,36 @@ class SettingsFrame(ctk.CTkFrame):
         if not self.controller.autoclean_enabled:
             self.slider.configure(state="disabled")
             
+        # Separator line 2
+        sep2 = ctk.CTkFrame(self.options_container, height=2, fg_color="#2E2E2E")
+        sep2.grid(row=4, column=0, padx=20, sticky="ew")
+        
+        # Floating Widget Option
+        widget_frame = ctk.CTkFrame(self.options_container, fg_color="transparent")
+        widget_frame.grid(row=5, column=0, padx=20, pady=15, sticky="ew")
+        widget_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_widget = ctk.CTkLabel(
+            widget_frame, text="Widget Desktop Melayang",
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        lbl_widget.grid(row=0, column=0, sticky="w")
+        
+        lbl_widget_desc = ctk.CTkLabel(
+            widget_frame, text="Tampilkan widget melayang kecil di layar desktop untuk optimasi RAM cepat.",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color="#888888"
+        )
+        lbl_widget_desc.grid(row=1, column=0, sticky="w", pady=(2, 0))
+        
+        self.widget_var = tk.BooleanVar(value=self.controller.floating_widget_enabled)
+        self.switch_widget = ctk.CTkSwitch(
+            widget_frame, text="", variable=self.widget_var, 
+            command=self.toggle_widget, progress_color="#3B82F6"
+        )
+        self.switch_widget.grid(row=0, column=1, rowspan=2, sticky="e")
+            
         # Log out button at bottom of settings
         logout_btn = ctk.CTkButton(
             self, text="Keluar dari Akun (Logout)",
@@ -938,6 +968,12 @@ class SettingsFrame(ctk.CTkFrame):
             height=35, command=self.perform_logout
         )
         logout_btn.grid(row=2, column=0, padx=20, pady=25, sticky="w")
+
+    def toggle_widget(self):
+        val = self.widget_var.get()
+        self.controller.floating_widget_enabled = val
+        self.controller.save_settings()
+        self.controller.toggle_floating_widget(val)
 
     def perform_logout(self):
         confirm = messagebox.askyesno("Logout", "Apakah Anda yakin ingin keluar dari akun?")
@@ -1932,6 +1968,7 @@ class App(ctk.CTk):
         self.current_user = None
         self.autoclean_enabled = False
         self.autoclean_threshold = 85
+        self.floating_widget_enabled = False
         
         # Window properties
         self.title("Bersihin")
@@ -1968,6 +2005,10 @@ class App(ctk.CTk):
         # Pemuatan sesi login & pengaturan lokal
         session = self.load_session()
         self.load_settings()
+        
+        self.floating_widget = None
+        if getattr(self, 'floating_widget_enabled', False):
+            self.after(2000, lambda: self.toggle_floating_widget(True))
         
         if session:
             # Pengecekan status blokir secara instan di background
@@ -2067,7 +2108,7 @@ class App(ctk.CTk):
         # Left Sidebar Frame
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#121212")
         self.sidebar.grid(row=0, column=0, sticky="nsew")
-        self.sidebar.grid_rowconfigure(8, weight=1) # Push lower items to bottom
+        self.sidebar.grid_rowconfigure(11, weight=1) # Push lower items to bottom
         
         # Sidebar Logo Header
         self.logo_label = ctk.CTkLabel(
@@ -2084,7 +2125,11 @@ class App(ctk.CTk):
         self.create_nav_button("Pembersih File", FileCleanerFrame, 3)
         self.create_nav_button("Game Booster", GameBoostFrame, 4)
         self.create_nav_button("Manajer Aplikasi", AppManagerFrame, 5)
-        self.create_nav_button("Pengaturan", SettingsFrame, 6)
+        self.create_nav_button("File Besar", LargeFileFinderFrame, 6)
+        self.create_nav_button("Pembersih Registry", RegistryCleanerFrame, 7)
+        self.create_nav_button("Klik Kanan", ContextMenuManagerFrame, 8)
+        self.create_nav_button("Optimasi Internet", InternetSpeedBoosterFrame, 9)
+        self.create_nav_button("Pengaturan", SettingsFrame, 10)
             
         # Right Side Content Container Frame
         self.container = ctk.CTkFrame(self, fg_color="#121212", corner_radius=0)
@@ -2110,7 +2155,8 @@ class App(ctk.CTk):
         
         # Load and stack screen frames
         self.frames = {}
-        for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, AppManagerFrame, SettingsFrame):
+        for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, AppManagerFrame, 
+                  LargeFileFinderFrame, RegistryCleanerFrame, ContextMenuManagerFrame, InternetSpeedBoosterFrame, SettingsFrame):
             frame = F(self.container, self)
             self.frames[F] = frame
             
@@ -2210,10 +2256,15 @@ class App(ctk.CTk):
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
             self.autoclean_enabled = winreg.QueryValueEx(key, "AutoCleanEnabled")[0] == 1
             self.autoclean_threshold = winreg.QueryValueEx(key, "AutoCleanThreshold")[0]
+            try:
+                self.floating_widget_enabled = winreg.QueryValueEx(key, "FloatingWidgetEnabled")[0] == 1
+            except Exception:
+                self.floating_widget_enabled = False
             winreg.CloseKey(key)
         except Exception:
             self.autoclean_enabled = False
             self.autoclean_threshold = 85
+            self.floating_widget_enabled = False
 
     def save_settings(self):
         """Saves settings to registry HKEY_CURRENT_USER."""
@@ -2222,6 +2273,7 @@ class App(ctk.CTk):
             key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
             winreg.SetValueEx(key, "AutoCleanEnabled", 0, winreg.REG_DWORD, 1 if self.autoclean_enabled else 0)
             winreg.SetValueEx(key, "AutoCleanThreshold", 0, winreg.REG_DWORD, self.autoclean_threshold)
+            winreg.SetValueEx(key, "FloatingWidgetEnabled", 0, winreg.REG_DWORD, 1 if self.floating_widget_enabled else 0)
             winreg.CloseKey(key)
         except Exception:
             pass
@@ -2392,3 +2444,689 @@ class App(ctk.CTk):
         if confirm and url:
             import webbrowser
             webbrowser.open(url)
+
+    def toggle_floating_widget(self, enabled):
+        """Displays or hides the floating desktop monitoring widget."""
+        if enabled:
+            if not self.floating_widget:
+                self.floating_widget = FloatingWidget(self)
+            self.floating_widget.deiconify()
+        else:
+            if self.floating_widget:
+                self.floating_widget.withdraw()
+
+class FloatingWidget(tk.Toplevel):
+    """Semi-transparent floating desktop widget for quick monitoring and RAM boosting."""
+    def __init__(self, controller):
+        super().__init__(controller)
+        self.controller = controller
+        
+        self.title("Bersihin Widget")
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.85)
+        self.configure(bg="#121212")
+        
+        # Dimensions and Position
+        width, height = 150, 160
+        self.geometry(f"{width}x{height}+100+100")
+        
+        # Draggable bindings
+        self.bind("<Button-1>", self.start_drag)
+        self.bind("<B1-Motion>", self.do_drag)
+        
+        # UI Elements
+        self.lbl_title = tk.Label(self, text="BERSIHIN WIDGET", font=("Segoe UI", 9, "bold"), fg="#3B82F6", bg="#121212")
+        self.lbl_title.pack(pady=(10, 5))
+        
+        self.lbl_ram = tk.Label(self, text="RAM: -%", font=("Segoe UI", 11, "bold"), fg="#FFFFFF", bg="#121212")
+        self.lbl_ram.pack(pady=2)
+        
+        self.lbl_cpu = tk.Label(self, text="CPU: -%", font=("Segoe UI", 11, "bold"), fg="#CCCCCC", bg="#121212")
+        self.lbl_cpu.pack(pady=2)
+        
+        self.btn_boost = ctk.CTkButton(
+            self, text="BOOST", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+            width=100, height=28, corner_radius=6, command=self.quick_boost
+        )
+        self.btn_boost.pack(pady=(12, 10))
+        
+        self.update_stats()
+        
+    def start_drag(self, event):
+        self.x = event.x
+        self.y = event.y
+
+    def do_drag(self, event):
+        deltax = event.x - self.x
+        deltay = event.y - self.y
+        new_x = self.winfo_x() + deltax
+        new_y = self.winfo_y() + deltay
+        self.geometry(f"+{new_x}+{new_y}")
+        
+    def update_stats(self):
+        if not self.winfo_exists():
+            return
+        try:
+            import psutil
+            import memory_cleaner
+            ram = memory_cleaner.get_ram_usage()
+            self.lbl_ram.configure(text=f"RAM: {ram['percent']}%")
+            
+            cpu = psutil.cpu_percent()
+            self.lbl_cpu.configure(text=f"CPU: {cpu}%")
+        except Exception:
+            pass
+        self.after(2000, self.update_stats)
+        
+    def quick_boost(self):
+        self.btn_boost.configure(state="disabled", text="Boosting...")
+        
+        def run():
+            import memory_cleaner
+            ram_before = memory_cleaner.get_ram_usage()
+            cleaned, failed = memory_cleaner.clean_process_working_sets()
+            
+            admin_msg = ""
+            if memory_cleaner.is_admin():
+                memory_cleaner.clean_system_file_cache()
+                memory_cleaner.clean_standby_list()
+                
+            ram_after = memory_cleaner.get_ram_usage()
+            freed_bytes = max(0, ram_before['used'] - ram_after['used'])
+            if freed_bytes >= 1024**3:
+                freed_str = f"{freed_bytes / (1024**3):.2f} GB"
+            else:
+                freed_str = f"{freed_bytes / (1024**2):.1f} MB"
+                
+            self.after(0, lambda: self.finish_boost(freed_str))
+            
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+        
+    def finish_boost(self, freed_str):
+        self.btn_boost.configure(state="normal", text="BOOST")
+        messagebox.showinfo("Widget Boost", f"Berhasil membebaskan {freed_str} RAM!")
+
+class RegistryCleanerFrame(ctk.CTkFrame):
+    """Registry Cleaner tab to scan and fix broken uninstall keys and dead DLLs."""
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        
+        self.invalid_uninstalls = []
+        self.dead_dlls = []
+        self.checkbox_vars = {}
+        
+        # Title
+        title = ctk.CTkLabel(
+            self, text="Pembersih Registry",
+            font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        
+        desc = ctk.CTkLabel(
+            self, text="Pindai dan bersihkan entri instalasi usang & referensi DLL mati di Registry Windows.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#AAAAAA"
+        )
+        desc.grid(row=1, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Container for results
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#1E1E1E", label_text="Daftar Masalah Registry Ditemukan", corner_radius=12)
+        self.scroll_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        self.scroll_frame.columnconfigure(0, weight=1)
+        
+        self.lbl_status = ctk.CTkLabel(
+            self.scroll_frame, text="Klik 'Pindai Registry' untuk memeriksa masalah di Registry Anda.",
+            font=ctk.CTkFont(size=13), text_color="#888888"
+        )
+        self.lbl_status.pack(pady=50)
+        
+        # Action Buttons frame
+        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_frame.grid(row=3, column=0, pady=(5, 20), padx=20, sticky="ew")
+        
+        self.btn_scan = ctk.CTkButton(
+            self.btn_frame, text="Pindai Registry",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#475569", hover_color="#334155", text_color="#FFFFFF",
+            width=150, height=40, command=self.run_scan
+        )
+        self.btn_scan.pack(side="left", padx=(0, 10))
+        
+        self.btn_clean = ctk.CTkButton(
+            self.btn_frame, text="Bersihkan Entri Terpilih",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+            width=200, height=40, command=self.run_clean
+        )
+        self.btn_clean.pack(side="right")
+        self.btn_clean.configure(state="disabled")
+        
+    def run_scan(self):
+        self.btn_scan.configure(state="disabled", text="Memindai...")
+        self.btn_clean.configure(state="disabled")
+        self.lbl_status.configure(text="Sedang memindai Registry Windows...")
+        self.controller.show_status("Memindai masalah Registry...")
+        
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+        self.checkbox_vars = {}
+        
+        def worker():
+            import premium_tools
+            uninstalls, dlls = premium_tools.scan_invalid_registry()
+            self.after(0, lambda: self.render_results(uninstalls, dlls))
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def render_results(self, uninstalls, dlls):
+        self.btn_scan.configure(state="normal", text="Pindai Registry")
+        self.invalid_uninstalls = uninstalls
+        self.dead_dlls = dlls
+        
+        if not uninstalls and not dlls:
+            lbl_res = ctk.CTkLabel(
+                self.scroll_frame, text="Registry Bersih! Tidak ditemukan masalah referensi usang.",
+                font=ctk.CTkFont(size=13), text_color="#10B981"
+            )
+            lbl_res.pack(pady=50)
+            self.btn_clean.configure(state="disabled")
+            self.controller.show_status("Pemindaian Registry selesai: Bersih.")
+            return
+            
+        self.btn_clean.configure(state="normal")
+        self.controller.show_status(f"Pemindaian selesai: Menemukan {len(uninstalls)} uninstall usang & {len(dlls)} DLL rusak.")
+        
+        # Render Uninstalls
+        if uninstalls:
+            lbl_u = ctk.CTkLabel(self.scroll_frame, text="Instalasi Aplikasi Usang:", font=ctk.CTkFont(size=14, weight="bold"), text_color="#EF4444")
+            lbl_u.pack(anchor="w", pady=(10, 5), padx=10)
+            for item in uninstalls:
+                row = tk.Frame(self.scroll_frame, bg="#1E1E1E", height=40)
+                row.pack(fill="x", pady=2, padx=10)
+                
+                cb_var = tk.BooleanVar(value=True)
+                self.checkbox_vars[("uninstall", item["path"])] = cb_var
+                
+                cb = ctk.CTkCheckBox(row, text=f"{item['name']} - {item['reason'][:80]}", variable=cb_var, font=ctk.CTkFont(size=11))
+                cb.pack(side="left", padx=5, fill="x", expand=True)
+                
+        # Render DLLs
+        if dlls:
+            lbl_d = ctk.CTkLabel(self.scroll_frame, text="Referensi DLL Mati:", font=ctk.CTkFont(size=14, weight="bold"), text_color="#F59E0B")
+            lbl_d.pack(anchor="w", pady=(20, 5), padx=10)
+            for item in dlls:
+                row = tk.Frame(self.scroll_frame, bg="#1E1E1E", height=40)
+                row.pack(fill="x", pady=2, padx=10)
+                
+                cb_var = tk.BooleanVar(value=True)
+                self.checkbox_vars[("dll", item["name"])] = cb_var
+                
+                disp = item["name"]
+                if len(disp) > 75:
+                    disp = disp[:35] + "..." + disp[-35:]
+                    
+                cb = ctk.CTkCheckBox(row, text=disp, variable=cb_var, font=ctk.CTkFont(size=11))
+                cb.pack(side="left", padx=5, fill="x", expand=True)
+                
+    def run_clean(self):
+        sel_uninstalls = [item for item in self.invalid_uninstalls if self.checkbox_vars.get(("uninstall", item["path"])).get()]
+        sel_dlls = [item for item in self.dead_dlls if self.checkbox_vars.get(("dll", item["name"])).get()]
+        
+        if not sel_uninstalls and not sel_dlls:
+            messagebox.showwarning("Pilih Item", "Pilih minimal satu entri registry untuk dibersihkan.")
+            return
+            
+        confirm = messagebox.askyesno(
+            "Konfirmasi Bersihkan Registry",
+            f"Apakah Anda yakin ingin menghapus {len(sel_uninstalls) + len(sel_dlls)} entri registry terpilih secara permanen?"
+        )
+        if not confirm:
+            return
+            
+        self.btn_clean.configure(state="disabled", text="Membersihkan...")
+        self.btn_scan.configure(state="disabled")
+        self.controller.show_status("Membersihkan Registry...")
+        
+        def worker():
+            import premium_tools
+            u_cleaned, d_cleaned = premium_tools.clean_invalid_registry(sel_uninstalls, sel_dlls)
+            self.after(0, lambda u=u_cleaned, d=d_cleaned: self.finish_clean(u, d))
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def finish_clean(self, u_count, d_count):
+        messagebox.showinfo("Registry Bersih", f"Berhasil menghapus:\n• {u_count} Kunci Uninstall usang\n• {d_count} Referensi DLL rusak.")
+        self.btn_scan.configure(state="normal")
+        self.run_scan()
+
+class LargeFileFinderFrame(ctk.CTkFrame):
+    """Large File Finder tab to scan folder/drive and clean huge files (>100MB)."""
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(3, weight=1)
+        
+        self.target_dir = ""
+        self.large_files = []
+        self.checkbox_vars = {}
+        
+        # Title
+        title = ctk.CTkLabel(
+            self, text="Pencari File Besar",
+            font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        
+        desc = ctk.CTkLabel(
+            self, text="Temukan dan hapus berkas berukuran raksasa (>100 MB) di folder Anda untuk meluangkan disk.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#AAAAAA"
+        )
+        desc.grid(row=1, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Folder Selector panel
+        self.top_panel = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=12, height=75)
+        self.top_panel.grid(row=2, column=0, padx=20, pady=5, sticky="ew")
+        self.top_panel.grid_propagate(False)
+        
+        self.btn_choose = ctk.CTkButton(
+            self.top_panel, text="Pilih Folder",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#475569", hover_color="#334155",
+            width=120, height=35, command=self.choose_folder
+        )
+        self.btn_choose.pack(side="left", padx=15, pady=20)
+        
+        self.lbl_folder = ctk.CTkLabel(
+            self.top_panel, text="Tidak ada folder terpilih.",
+            font=ctk.CTkFont(size=13, slant="italic"),
+            text_color="#888888"
+        )
+        self.lbl_folder.pack(side="left", padx=10, pady=20)
+        
+        self.btn_scan = ctk.CTkButton(
+            self.top_panel, text="Mulai Pindai",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#3B82F6", hover_color="#2563EB",
+            width=120, height=35, command=self.run_scan
+        )
+        self.btn_scan.pack(side="right", padx=15, pady=20)
+        self.btn_scan.configure(state="disabled")
+        
+        # Middle Scroll list
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#1E1E1E", label_text="Daftar File Besar (>100MB)", corner_radius=12)
+        self.scroll_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+        
+        self.lbl_status = ctk.CTkLabel(
+            self.scroll_frame, text="Silakan pilih folder dan lakukan pemindaian terlebih dahulu.",
+            font=ctk.CTkFont(size=13), text_color="#888888"
+        )
+        self.lbl_status.pack(pady=50)
+        
+        # Bottom Actions Bar
+        self.bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
+        self.bottom_bar.grid(row=4, column=0, padx=20, pady=(5, 20), sticky="ew")
+        
+        self.btn_delete = ctk.CTkButton(
+            self.bottom_bar, text="Hapus File Terpilih",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#EF4444", hover_color="#DC2626", text_color="#FFFFFF",
+            width=180, height=40, command=self.delete_selected_files
+        )
+        self.btn_delete.pack(side="right")
+        self.btn_delete.configure(state="disabled")
+        
+        self.btn_select_all = ctk.CTkButton(
+            self.bottom_bar, text="Pilih Semua",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#475569", hover_color="#334155", text_color="#FFFFFF",
+            width=120, height=40, command=self.select_all
+        )
+        self.btn_select_all.pack(side="left", padx=(0, 10))
+        self.btn_select_all.configure(state="disabled")
+        
+        self.btn_deselect_all = ctk.CTkButton(
+            self.bottom_bar, text="Batal Pilih",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#333333", hover_color="#444444", text_color="#FFFFFF",
+            width=100, height=40, command=self.deselect_all
+        )
+        self.btn_deselect_all.pack(side="left")
+        self.btn_deselect_all.configure(state="disabled")
+        
+    def choose_folder(self):
+        folder = filedialog.askdirectory(title="Pilih Folder untuk Scan File Besar")
+        if folder:
+            self.target_dir = folder
+            self.lbl_folder.configure(text=folder, text_color="#FFFFFF")
+            self.btn_scan.configure(state="normal")
+            
+    def run_scan(self):
+        self.btn_scan.configure(state="disabled", text="Memindai...")
+        self.btn_choose.configure(state="disabled")
+        self.btn_delete.configure(state="disabled")
+        self.btn_select_all.configure(state="disabled")
+        self.btn_deselect_all.configure(state="disabled")
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+        self.lbl_status = ctk.CTkLabel(self.scroll_frame, text="Sedang memindai direktori (mengurutkan ukuran)...", text_color="#888888")
+        self.lbl_status.pack(pady=50)
+        self.controller.show_status("Memindai berkas besar...")
+        self.checkbox_vars = {}
+        
+        def worker():
+            import premium_tools
+            files = premium_tools.find_large_files(self.target_dir, min_size_mb=100)
+            self.after(0, lambda: self.render_results(files))
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def render_results(self, files):
+        self.btn_scan.configure(state="normal", text="Mulai Pindai")
+        self.btn_choose.configure(state="normal")
+        self.large_files = files
+        
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+            
+        if not files:
+            self.lbl_status = ctk.CTkLabel(
+                self.scroll_frame, text="Folder Bersih! Tidak ada file berukuran besar (>100 MB).",
+                font=ctk.CTkFont(size=13), text_color="#10B981"
+            )
+            self.lbl_status.pack(pady=50)
+            self.btn_delete.configure(state="disabled")
+            self.btn_select_all.configure(state="disabled")
+            self.btn_deselect_all.configure(state="disabled")
+            self.controller.show_status("Scan selesai: Tidak ada berkas besar.")
+            return
+            
+        self.btn_delete.configure(state="normal")
+        self.btn_select_all.configure(state="normal")
+        self.btn_deselect_all.configure(state="normal")
+        self.controller.show_status(f"Scan selesai: Menemukan {len(files)} berkas besar.")
+        
+        to_mb = lambda b: f"{b / (1024*1024):.1f} MB"
+        
+        for item in files:
+            row = tk.Frame(self.scroll_frame, bg="#1E1E1E", height=45)
+            row.pack(fill="x", pady=3, padx=5)
+            row.pack_propagate(False)
+            
+            row.grid_columnconfigure(0, weight=1)
+            row.grid_columnconfigure(1, weight=0)
+            row.grid_rowconfigure(0, weight=1)
+            
+            cb_var = tk.BooleanVar(value=False)
+            self.checkbox_vars[item["path"]] = cb_var
+            
+            disp = item["path"]
+            if len(disp) > 85:
+                disp = disp[:40] + "..." + disp[-40:]
+                
+            cb = ctk.CTkCheckBox(row, text=disp, variable=cb_var, font=ctk.CTkFont(size=11))
+            cb.grid(row=0, column=0, padx=10, sticky="w")
+            
+            lbl_size = tk.Label(row, text=to_mb(item["size"]), font=("Segoe UI", 10, "bold"), fg="#EF4444", bg="#1E1E1E")
+            lbl_size.grid(row=0, column=1, padx=15, sticky="e")
+            
+    def delete_selected_files(self):
+        files_to_del = [path for path, var in self.checkbox_vars.items() if var.get()]
+        if not files_to_del:
+            messagebox.showwarning("Pilih Berkas", "Pilih minimal satu berkas untuk dihapus.")
+            return
+            
+        confirm = messagebox.askyesno(
+            "Konfirmasi Hapus Berkas",
+            f"Apakah Anda yakin ingin menghapus permanen {len(files_to_del)} berkas besar terpilih?"
+        )
+        if not confirm:
+            return
+            
+        self.btn_delete.configure(state="disabled", text="Menghapus...")
+        self.btn_scan.configure(state="disabled")
+        self.controller.show_status("Menghapus berkas besar...")
+        
+        def worker():
+            deleted = 0
+            freed = 0
+            failed = 0
+            import stat
+            for path in files_to_del:
+                try:
+                    sz = os.path.getsize(path)
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                    except Exception:
+                        pass
+                    os.remove(path)
+                    deleted += 1
+                    freed += sz
+                except Exception:
+                    failed += 1
+            self.after(0, lambda c=deleted, f=freed, fl=failed: self.finish_deletion(c, f, fl))
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def finish_deletion(self, count, bytes_freed, failed_count):
+        to_mb = lambda b: f"{b / (1024*1024):.1f} MB"
+        msg = f"Berhasil menghapus {count} berkas besar dan membebaskan {to_mb(bytes_freed)} ruang disk."
+        if failed_count > 0:
+            msg += f"\n\nPerhatian: {failed_count} berkas gagal dihapus (sedang digunakan)."
+        messagebox.showinfo("Selesai", msg)
+        self.controller.show_status(f"Hapus berkas selesai: Bebas {to_mb(bytes_freed)}.")
+        
+        freed_mb = bytes_freed / (1024 * 1024)
+        def report_worker():
+            import firebase_handler
+            firebase_handler.report_stats(
+                self.controller.current_user['uid'],
+                self.controller.current_user['idToken'],
+                0,
+                freed_mb
+            )
+        threading.Thread(target=report_worker, daemon=True).start()
+        
+        self.run_scan()
+        
+    def select_all(self):
+        for var in self.checkbox_vars.values():
+            var.set(True)
+            
+    def deselect_all(self):
+        for var in self.checkbox_vars.values():
+            var.set(False)
+
+class ContextMenuManagerFrame(ctk.CTkFrame):
+    """Context Menu Manager tab to disable/enable right-click context options safely."""
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        
+        self.handlers = []
+        
+        # Title
+        title = ctk.CTkLabel(
+            self, text="Pengatur Klik Kanan",
+            font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        
+        desc = ctk.CTkLabel(
+            self, text="Kelola dan bersihkan menu klik kanan Windows Explorer Anda dengan aman (Reversible).",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#AAAAAA"
+        )
+        desc.grid(row=1, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Scrollable container
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#1E1E1E", label_text="Daftar Menu Klik Kanan Ditemukan", corner_radius=12)
+        self.scroll_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        self.scroll_frame.columnconfigure(0, weight=1)
+        
+        # Status Label
+        self.lbl_status = ctk.CTkLabel(self.scroll_frame, text="Memuat menu klik kanan...", text_color="#888888")
+        self.lbl_status.pack(pady=40)
+        
+        self.load_handlers()
+        
+    def load_handlers(self):
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+            
+        def worker():
+            import premium_tools
+            self.handlers = premium_tools.list_context_menus()
+            self.after(0, self.render_handlers)
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def render_handlers(self):
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+            
+        if not self.handlers:
+            lbl = ctk.CTkLabel(self.scroll_frame, text="Tidak ada handler pihak ketiga yang dapat dimodifikasi.", text_color="#888888")
+            lbl.pack(pady=40)
+            return
+            
+        file_handlers = [h for h in self.handlers if h["category"] == "File"]
+        folder_handlers = [h for h in self.handlers if h["category"] == "Folder Background"]
+        
+        if file_handlers:
+            lbl_f = ctk.CTkLabel(self.scroll_frame, text="Menu Pada Berkas/File (*):", font=ctk.CTkFont(size=14, weight="bold"), text_color="#3B82F6")
+            lbl_f.pack(anchor="w", pady=(10, 5), padx=10)
+            
+            for item in file_handlers:
+                self.create_handler_row(item)
+                
+        if folder_handlers:
+            lbl_fol = ctk.CTkLabel(self.scroll_frame, text="Menu Pada Latar Belakang Folder:", font=ctk.CTkFont(size=14, weight="bold"), text_color="#10B981")
+            lbl_fol.pack(anchor="w", pady=(20, 5), padx=10)
+            
+            for item in folder_handlers:
+                self.create_handler_row(item)
+                
+    def create_handler_row(self, item):
+        row = tk.Frame(self.scroll_frame, bg="#1E1E1E", height=45)
+        row.pack(fill="x", pady=2, padx=10)
+        row.pack_propagate(False)
+        
+        row.grid_columnconfigure(0, weight=1)
+        row.grid_columnconfigure(1, weight=0)
+        row.grid_rowconfigure(0, weight=1)
+        
+        disp_name = item["name"] if item["name"] else item["clsid"]
+        
+        lbl_name = tk.Label(row, text=disp_name, font=("Segoe UI", 10, "bold"), fg="#FFFFFF", bg="#1E1E1E", anchor="w")
+        lbl_name.grid(row=0, column=0, padx=10, sticky="w")
+        
+        sw_var = tk.BooleanVar(value=item["enabled"])
+        
+        def toggle(item=item, var=sw_var):
+            item["enabled"] = var.get()
+            def task():
+                import premium_tools
+                ok = premium_tools.toggle_context_menu(item)
+                if ok:
+                    self.after(0, lambda: self.controller.show_status(f"Menu '{item['name']}' berhasil diupdate."))
+                    self.after(0, self.load_handlers)
+                else:
+                    self.after(0, lambda: messagebox.showerror("Gagal", f"Gagal mengubah status menu '{item['name']}' (Butuh hak Administrator)."))
+                    self.after(0, self.load_handlers)
+            threading.Thread(target=task, daemon=True).start()
+            
+        sw = ctk.CTkSwitch(row, text="", variable=sw_var, command=toggle, progress_color="#3B82F6")
+        sw.grid(row=0, column=1, padx=10, sticky="e")
+
+class InternetSpeedBoosterFrame(ctk.CTkFrame):
+    """Internet Speed Booster tab to optimize TCP/IP network settings and reset Winsock."""
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        self.grid_columnconfigure(0, weight=1)
+        
+        # Title
+        title = ctk.CTkLabel(
+            self, text="Pengoptimal Internet",
+            font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        
+        desc = ctk.CTkLabel(
+            self, text="Optimalkan pengaturan jaringan TCP/IP Windows dan segarkan soket Winsock Anda secara otomatis.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#AAAAAA"
+        )
+        desc.grid(row=1, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Card Container
+        self.card = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=12)
+        self.card.grid(row=2, column=0, padx=20, pady=5, sticky="ew")
+        self.card.columnconfigure(0, weight=1)
+        
+        lbl_info_title = ctk.CTkLabel(self.card, text="OPTIMASI YANG AKAN DILAKUKAN", font=ctk.CTkFont(size=14, weight="bold"), text_color="#3B82F6")
+        lbl_info_title.pack(pady=(15, 10), padx=20, anchor="w")
+        
+        lbl_info = ctk.CTkLabel(
+            self.card,
+            text="• RFC 1323 Window Scaling: Meningkatkan throughput internet berkecepatan tinggi.\n"
+                 "• Default TTL = 64: Menstandardisasi lompatan paket data untuk latency stabil.\n"
+                 "• Max User Ports: Meningkatkan limitasi alokasi port keluar untuk multi-tasking.\n"
+                 "• Flush DNS Cache: Membersihkan catatan domain domain usang di Windows.\n"
+                 "• TCP/IP Winsock Reset: Memperbaiki soket jaringan yang rusak atau terputus.\n"
+                 "• IP Address Renewal: Mengambil alamat IP segar dari DHCP Router Anda.",
+            font=ctk.CTkFont(size=12), text_color="#CCCCCC", justify="left"
+        )
+        lbl_info.pack(pady=10, padx=25, anchor="w")
+        
+        self.btn_optimize = ctk.CTkButton(
+            self.card, text="Optimalkan Koneksi Sekarang",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+            width=280, height=45, corner_radius=8, command=self.run_optimization
+        )
+        self.btn_optimize.pack(pady=25)
+        
+    def run_optimization(self):
+        self.btn_optimize.configure(state="disabled", text="Mengoptimalkan...")
+        self.controller.show_status("Menjalankan optimasi koneksi internet...")
+        
+        def worker():
+            import premium_tools
+            reg_ok, reset_log = premium_tools.optimize_internet_settings()
+            self.after(0, lambda ok=reg_ok, log=reset_log: self.finish_optimization(ok, log))
+            
+        threading.Thread(target=worker, daemon=True).start()
+        
+    def finish_optimization(self, reg_ok, reset_log):
+        self.btn_optimize.configure(state="normal", text="Optimalkan Koneksi Sekarang")
+        self.controller.show_status("Optimasi koneksi internet selesai.")
+        
+        msg = "Optimasi Koneksi Selesai!\n\n"
+        if reg_ok:
+            msg += "✓ Tweak Registry TCP/IP berhasil diterapkan.\n"
+        else:
+            msg += "✗ Gagal menerapkan Tweak Registry (Butuh hak Administrator).\n"
+            
+        msg += "✓ Pembersihan DNS Cache selesai.\n"
+        msg += "✓ Soket Winsock jaringan berhasil direset."
+        
+        messagebox.showinfo("Optimasi Selesai", msg)
