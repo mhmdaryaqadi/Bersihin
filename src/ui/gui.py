@@ -2083,37 +2083,8 @@ class App(ctk.CTk):
         self.create_nav_button("RAM Mendalam", RAMCleanerFrame, 2)
         self.create_nav_button("Pembersih File", FileCleanerFrame, 3)
         self.create_nav_button("Game Booster", GameBoostFrame, 4)
-        self.create_nav_button("Cari Duplikat", DuplicateFinderFrame, 5)
-        self.create_nav_button("Manajer Aplikasi", AppManagerFrame, 6)
-        self.create_nav_button("Pengaturan", SettingsFrame, 7)
-        
-        # Admin Privilege Badge
-        self.priv_badge = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.priv_badge.grid(row=8, column=0, padx=15, pady=(10, 5), sticky="ew")
-        
-        is_adm = memory_cleaner.is_admin()
-        badge_bg = "#3B82F6" if is_adm else "#2E2E2E"
-        badge_text = "Mode: Admin" if is_adm else "Mode: Pengguna"
-        
-        self.badge_lbl = ctk.CTkLabel(
-            self.priv_badge, text=badge_text,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color="#FFFFFF", fg_color=badge_bg, corner_radius=6, height=24
-        )
-        self.badge_lbl.pack(fill="x", padx=5)
-        
-        if not is_adm:
-            self.btn_relaunch = ctk.CTkButton(
-                self.sidebar, text="Jalankan sebagai Admin",
-                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                fg_color="#333333", hover_color="#444444", text_color="#3B82F6",
-                height=30, command=self.relaunch_as_admin
-            )
-            self.btn_relaunch.grid(row=9, column=0, padx=20, pady=(5, 20), sticky="ew")
-        else:
-            # Placeholder padding
-            self.pad_lbl = ctk.CTkLabel(self.sidebar, text="", height=20)
-            self.pad_lbl.grid(row=9, column=0, pady=(5, 10))
+        self.create_nav_button("Manajer Aplikasi", AppManagerFrame, 5)
+        self.create_nav_button("Pengaturan", SettingsFrame, 6)
             
         # Right Side Content Container Frame
         self.container = ctk.CTkFrame(self, fg_color="#121212", corner_radius=0)
@@ -2139,7 +2110,7 @@ class App(ctk.CTk):
         
         # Load and stack screen frames
         self.frames = {}
-        for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, DuplicateFinderFrame, AppManagerFrame, SettingsFrame):
+        for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, AppManagerFrame, SettingsFrame):
             frame = F(self.container, self)
             self.frames[F] = frame
             
