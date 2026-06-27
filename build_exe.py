@@ -16,7 +16,7 @@ def build():
     cmd = [
         python_exe, "-m", "PyInstaller",
         "--noconfirm",
-        "--onefile",
+        "--onedir",
         "--windowed",
         "--name=Bersihin",
         "--uac-admin",
@@ -24,6 +24,9 @@ def build():
         "--add-data=assets/logo.ico;assets",
         "--add-data=assets/logo.png;assets",
         "--paths=src",
+        "--paths=src/ui",
+        "--paths=src/core",
+        "--paths=src/auth",
         "--collect-all=customtkinter",
         "main.py"
     ]
@@ -36,14 +39,19 @@ def build():
         if result.returncode == 0:
             print("\n=== Kompilasi Berhasil! ===")
             
-            # Cari file .exe yang dihasilkan di folder dist
-            dist_exe = os.path.join("dist", "Bersihin.exe")
-            target_exe = "Bersihin.exe"
+            # Cari folder yang dihasilkan di dist/Bersihin
+            dist_folder = os.path.join("dist", "Bersihin")
+            target_folder = "Bersihin"
             
-            if os.path.exists(dist_exe):
-                print(f"Menyalin {dist_exe} ke folder root project...")
-                shutil.copy2(dist_exe, target_exe)
-                print(f"Sukses! File executable Anda sekarang berada di: {os.path.abspath(target_exe)}")
+            if os.path.exists(dist_folder):
+                # Hapus target folder lama jika ada
+                if os.path.exists(target_folder):
+                    print(f"Menghapus folder lama {target_folder}...")
+                    shutil.rmtree(target_folder)
+                    
+                print(f"Menyalin {dist_folder} ke folder root project...")
+                shutil.copytree(dist_folder, target_folder)
+                print(f"Sukses! Folder aplikasi Anda sekarang berada di: {os.path.abspath(target_folder)}")
                 
                 # Pembersihan folder temporary build untuk merapikan workspace
                 print("\nMembersihkan folder temporary build...")
@@ -51,10 +59,10 @@ def build():
                     shutil.rmtree("build")
                 if os.path.exists("Bersihin.spec"):
                     os.remove("Bersihin.spec")
-                # Hapus exe lama jika ada
-                if os.path.exists("AntigravityCleaner.exe"):
+                # Hapus file Bersihin.exe lama jika ada
+                if os.path.exists("Bersihin.exe"):
                     try:
-                        os.remove("AntigravityCleaner.exe")
+                        os.remove("Bersihin.exe")
                     except:
                         pass
                 print("Pembersihan selesai.")
