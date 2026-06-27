@@ -17,35 +17,53 @@ def is_admin():
     except:
         return False
 
-# Keep global reference to mutex to prevent garbage collection
-app_mutex = None
+import socket
+import threading
 
-# Custom Registered Window Message
-WM_SHOW_ME = None
+# Global variables for single instance socket communication
+app_instance = None
+server_socket = None
+
+def check_single_instance(port=49201):
+    global server_socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', port))
+        s.listen(1)
+        server_socket = s
+        
+        def listen_loop():
+            while True:
+                try:
+                    conn, addr = s.accept()
+                    data = conn.recv(1024).decode('utf-8')
+                    if data == "restore":
+                        global app_instance
+                        if app_instance:
+                            app_instance.after(0, app_instance.restore_from_tray)
+                    conn.close()
+                except Exception:
+                    break
+                    
+        t = threading.Thread(target=listen_loop, daemon=True)
+        t.start()
+        return True
+    except socket.error:
+        # Another instance is running, connect and notify it to restore
+        try:
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect(('127.0.0.1', port))
+            client.sendall(b"restore")
+            client.close()
+        except Exception:
+            pass
+        sys.exit(0)
 
 def main():
-    global app_mutex, WM_SHOW_ME
+    global app_instance
     
-    # Register custom message
-    try:
-        WM_SHOW_ME = ctypes.windll.user32.RegisterWindowMessageW("antigravity_bersihin_cleaner_show_me")
-    except Exception:
-        pass
-        
-    # Single Instance Check using Win32 Mutex
-    MUTEX_NAME = "Global\\antigravity_bersihin_cleaner_mutex"
-    try:
-        app_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
-        last_error = ctypes.windll.kernel32.GetLastError()
-        if last_error == 183: # ERROR_ALREADY_EXISTS
-            # Another instance is already running!
-            # Broadcast the custom message to restore the running instance
-            if WM_SHOW_ME:
-                # HWND_BROADCAST = 0xFFFF
-                ctypes.windll.user32.PostMessageW(0xFFFF, WM_SHOW_ME, 0, 0)
-            sys.exit(0)
-    except Exception as e:
-        print("Single instance check error:", e)
+    # Check single instance using local TCP port
+    check_single_instance()
 
     # Inisialisasi ID model pengguna agar ikon taskbar terkelompok dengan benar
     try:
@@ -56,6 +74,7 @@ def main():
     from gui import App
     start_minimized = "--startup" in sys.argv
     app = App(start_minimized=start_minimized)
+    app_instance = app
     app.mainloop()
 
 if __name__ == "__main__":
