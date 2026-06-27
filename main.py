@@ -20,9 +20,18 @@ def is_admin():
 # Keep global reference to mutex to prevent garbage collection
 app_mutex = None
 
+# Custom Registered Window Message
+WM_SHOW_ME = None
+
 def main():
-    global app_mutex
+    global app_mutex, WM_SHOW_ME
     
+    # Register custom message
+    try:
+        WM_SHOW_ME = ctypes.windll.user32.RegisterWindowMessageW("antigravity_bersihin_cleaner_show_me")
+    except Exception:
+        pass
+        
     # Single Instance Check using Win32 Mutex
     MUTEX_NAME = "Global\\antigravity_bersihin_cleaner_mutex"
     try:
@@ -30,12 +39,10 @@ def main():
         last_error = ctypes.windll.kernel32.GetLastError()
         if last_error == 183: # ERROR_ALREADY_EXISTS
             # Another instance is already running!
-            # Find its window and restore it
-            hwnd = ctypes.windll.user32.FindWindowW(None, "Bersihin")
-            if hwnd:
-                # SW_RESTORE = 9, SW_SHOW = 5
-                ctypes.windll.user32.ShowWindow(hwnd, 9)
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
+            # Broadcast the custom message to restore the running instance
+            if WM_SHOW_ME:
+                # HWND_BROADCAST = 0xFFFF
+                ctypes.windll.user32.PostMessageW(0xFFFF, WM_SHOW_ME, 0, 0)
             sys.exit(0)
     except Exception as e:
         print("Single instance check error:", e)

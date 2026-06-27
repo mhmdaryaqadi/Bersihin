@@ -2032,6 +2032,38 @@ class App(ctk.CTk):
         if getattr(self, 'floating_widget_enabled', False):
             self.after(2000, lambda: self.toggle_floating_widget(True))
         
+        # Intercept Windows custom message to restore from tray
+        try:
+            import ctypes
+            # Register the exact same message string as in main.py
+            self.WM_SHOW_ME = ctypes.windll.user32.RegisterWindowMessageW("antigravity_bersihin_cleaner_show_me")
+            
+            # Hook the window procedure using Tkinter's internal winfo_id
+            self.hwnd = self.winfo_id()
+            
+            # Save original window proc and hook custom callback
+            GWL_WNDPROC = -4
+            WNDPROC_TYPE = ctypes.WINFUNCTYPE(ctypes.c_int64, ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint64, ctypes.c_int64)
+            
+            def custom_wnd_proc(hwnd, msg, wparam, lparam):
+                if msg == self.WM_SHOW_ME:
+                    # Relaunch request received, restore app from tray
+                    self.after(0, self.restore_from_tray)
+                    return 0
+                return ctypes.windll.user32.CallWindowProcW(self.old_wnd_proc, hwnd, msg, wparam, lparam)
+                
+            self.custom_wnd_proc_callback = WNDPROC_TYPE(custom_wnd_proc)
+            
+            # Use appropriate dll based on python architecture
+            if ctypes.sizeof(ctypes.c_void_p) == 8:
+                self.old_wnd_proc = ctypes.windll.user32.GetWindowLongPtrW(self.hwnd, GWL_WNDPROC)
+                ctypes.windll.user32.SetWindowLongPtrW(self.hwnd, GWL_WNDPROC, self.custom_wnd_proc_callback)
+            else:
+                self.old_wnd_proc = ctypes.windll.user32.GetWindowLongW(self.hwnd, GWL_WNDPROC)
+                ctypes.windll.user32.SetWindowLongW(self.hwnd, GWL_WNDPROC, self.custom_wnd_proc_callback)
+        except Exception as e:
+            print("Failed to register custom window message listener:", e)
+
         if session:
             # Pengecekan status blokir secara instan di background
             self.current_user = session
