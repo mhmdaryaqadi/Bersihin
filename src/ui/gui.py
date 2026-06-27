@@ -25,6 +25,20 @@ import memory_cleaner
 import file_cleaner
 import firebase_handler
 
+def relaunch_as_admin():
+    import ctypes
+    try:
+        if getattr(sys, 'frozen', False):
+            path = sys.executable
+            args = " ".join(sys.argv[1:])
+        else:
+            path = sys.executable
+            args = f'"{os.path.abspath(sys.argv[0])}" ' + " ".join(sys.argv[1:])
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", path, args, None, 1)
+        sys.exit(0)
+    except Exception as e:
+        messagebox.showerror("Error UAC", f"Gagal menjalankan ulang sebagai Administrator:\n{e}")
+
 # Set theme and appearance
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -419,18 +433,13 @@ class RAMCleanerFrame(ctk.CTkFrame):
         self.cb_working_set.grid(row=1, column=0, padx=20, pady=10, sticky="w")
         self.cb_working_set.select()
         
-        is_admin = memory_cleaner.is_admin()
-        
         self.cb_sys_cache = ctk.CTkCheckBox(
             self.left_panel, 
             text="System File Cache (Butuh Admin)", 
             font=ctk.CTkFont(size=13)
         )
         self.cb_sys_cache.grid(row=2, column=0, padx=20, pady=10, sticky="w")
-        if is_admin:
-            self.cb_sys_cache.select()
-        else:
-            self.cb_sys_cache.configure(state="disabled")
+        self.cb_sys_cache.select()
             
         self.cb_standby = ctk.CTkCheckBox(
             self.left_panel, 
@@ -438,21 +447,7 @@ class RAMCleanerFrame(ctk.CTkFrame):
             font=ctk.CTkFont(size=13)
         )
         self.cb_standby.grid(row=3, column=0, padx=20, pady=10, sticky="w")
-        if is_admin:
-            self.cb_standby.select()
-        else:
-            self.cb_standby.configure(state="disabled")
-            
-        # Admin notice if not admin
-        if not is_admin:
-            notice = ctk.CTkLabel(
-                self.left_panel, 
-                text="Jalankan sebagai Administrator untuk membuka\nsemua opsi pembersihan memori mendalam.",
-                font=ctk.CTkFont(size=11, slant="italic"),
-                text_color="#CCCCCC",
-                justify="left"
-            )
-            notice.grid(row=4, column=0, padx=20, pady=15, sticky="w")
+        self.cb_standby.select()
             
         # Action button
         self.btn_deep_clean = ctk.CTkButton(
@@ -519,6 +514,18 @@ class RAMCleanerFrame(ctk.CTkFrame):
         
         if not (clean_ws or clean_cache or clean_standby):
             messagebox.showwarning("Pilih Opsi", "Silakan pilih minimal satu opsi pembersihan.")
+            return
+            
+        # Check if we need admin rights
+        needs_admin = (clean_cache or clean_standby)
+        if needs_admin and not memory_cleaner.is_admin():
+            confirm = messagebox.askyesno(
+                "Butuh Hak Akses Administrator",
+                "Opsi pembersihan memori mendalam (System File Cache / Standby List) membutuhkan hak akses Administrator.\n\n"
+                "Apakah Anda ingin menjalankan ulang aplikasi ini sebagai Administrator?"
+            )
+            if confirm:
+                relaunch_as_admin()
             return
             
         ram = memory_cleaner.get_ram_usage()
@@ -656,10 +663,8 @@ class FileCleanerFrame(ctk.CTkFrame):
             
             # Admin warning badge if required but not admin
             if info.get('requires_admin') and not is_admin:
-                checkbox.configure(state="disabled")
-                cb_var.set(False)
-                size_lbl.configure(text="Butuh Admin", text_color="#888888")
-                desc_lbl.configure(text=f"[Hak Admin Dibutuhkan] {info['desc']}", text_color="#888888")
+                # Keep checkbox enabled, but append notice to description
+                desc_lbl.configure(text=f"(Butuh Admin) {info['desc']}")
                 
             self.ui_elements[key] = {
                 'frame': item_frame,
@@ -707,6 +712,23 @@ class FileCleanerFrame(ctk.CTkFrame):
 
     def run_scan(self):
         """Scans selected target directories for file sizes in background thread."""
+        # Check if any selected target requires admin and we are not admin
+        needs_admin = False
+        for key, ui in self.ui_elements.items():
+            if self.checkbox_vars[key].get() and self.targets[key].get('requires_admin'):
+                needs_admin = True
+                break
+                
+        if needs_admin and not memory_cleaner.is_admin():
+            confirm = messagebox.askyesno(
+                "Butuh Hak Akses Administrator",
+                "Beberapa kategori pembersihan yang Anda pilih membutuhkan hak akses Administrator.\n\n"
+                "Apakah Anda ingin menjalankan ulang aplikasi ini sebagai Administrator?"
+            )
+            if confirm:
+                relaunch_as_admin()
+            return
+            
         self.btn_scan.configure(state="disabled", text="Memindai...")
         self.btn_clean.configure(state="disabled")
         self.controller.show_status("Memindai file sampah di sistem...")
@@ -2617,6 +2639,16 @@ class RegistryCleanerFrame(ctk.CTkFrame):
         self.btn_clean.configure(state="disabled")
         
     def run_scan(self):
+        if not memory_cleaner.is_admin():
+            confirm = messagebox.askyesno(
+                "Butuh Hak Akses Administrator",
+                "Fitur pemindaian Registry Windows membutuhkan hak akses Administrator.\n\n"
+                "Apakah Anda ingin menjalankan ulang aplikasi ini sebagai Administrator?"
+            )
+            if confirm:
+                relaunch_as_admin()
+            return
+            
         self.btn_scan.configure(state="disabled", text="Memindai...")
         self.btn_clean.configure(state="disabled")
         

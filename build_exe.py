@@ -19,7 +19,6 @@ def build():
         "--onedir",
         "--windowed",
         "--name=Bersihin",
-        "--uac-admin",
         "--icon=assets/logo.ico",
         "--add-data=assets/logo.ico;assets",
         "--add-data=assets/logo.png;assets",

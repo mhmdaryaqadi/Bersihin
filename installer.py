@@ -6,15 +6,23 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image, ImageTk
+import winreg
+import stat
 
 # Set dark theme
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class InstallerApp(ctk.CTk):
-    def __init__(self):
+    def __init__(self, is_uninstall=False):
         super().__init__()
-        self.title("Bersihin Setup Wizard")
+        self.is_uninstall = is_uninstall
+        
+        if self.is_uninstall:
+            self.title("Bersihin Uninstall Wizard")
+        else:
+            self.title("Bersihin Setup Wizard")
+            
         self.geometry("680x440")
         self.resizable(False, False)
         
@@ -42,16 +50,16 @@ class InstallerApp(ctk.CTk):
         except Exception:
             pass
             
-        # Set window icon and taskbar icon (.ico format is required for Windows taskbar and titlebar)
+        # Set window icon and taskbar icon
         if os.path.exists(self.ico_path):
             try:
                 self.iconbitmap(self.ico_path)
             except Exception as e:
                 print("Failed to set window icon:", e)
-            
-        # Default Install Path: Program Files
+                
+        # Default Install Path
         program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
-        self.default_install_path = os.path.join(program_files, "Bersihin")
+        self.install_path = os.path.join(program_files, "Bersihin")
         
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -65,9 +73,12 @@ class InstallerApp(ctk.CTk):
             except Exception as e:
                 print("Failed to load logo image:", e)
                 
-        # Draw Layout
         self.draw_sidebar()
-        self.show_step_license()
+        
+        if self.is_uninstall:
+            self.show_uninstall_confirm()
+        else:
+            self.show_step_license()
         
     def draw_sidebar(self):
         # Left Sidebar Frame
@@ -81,11 +92,7 @@ class InstallerApp(ctk.CTk):
             self.lbl_logo = ctk.CTkLabel(self.sidebar_frame, image=self.logo_img, text="")
             self.lbl_logo.grid(row=0, column=0, pady=(35, 10))
         else:
-            # Fallback text logo
-            self.lbl_logo = ctk.CTkLabel(
-                self.sidebar_frame, text="🛡️", 
-                font=ctk.CTkFont(size=40)
-            )
+            self.lbl_logo = ctk.CTkLabel(self.sidebar_frame, text="🛡️", font=ctk.CTkFont(size=40))
             self.lbl_logo.grid(row=0, column=0, pady=(35, 10))
             
         # Branded Header
@@ -96,8 +103,9 @@ class InstallerApp(ctk.CTk):
         )
         self.lbl_brand.grid(row=1, column=0, pady=(0, 5))
         
+        sub_text = "Uninstall Wizard" if self.is_uninstall else "Setup Wizard"
         self.lbl_sub = ctk.CTkLabel(
-            self.sidebar_frame, text="Setup Wizard",
+            self.sidebar_frame, text=sub_text,
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color="#64748B"
         )
@@ -112,12 +120,19 @@ class InstallerApp(ctk.CTk):
         for w in self.steps_container.winfo_children():
             w.destroy()
             
-        steps = [
-            "1. Persetujuan Lisensi",
-            "2. Folder & Shortcut",
-            "3. Pemasangan",
-            "4. Selesai"
-        ]
+        if self.is_uninstall:
+            steps = [
+                "1. Konfirmasi",
+                "2. Penghapusan",
+                "3. Selesai"
+            ]
+        else:
+            steps = [
+                "1. Persetujuan Lisensi",
+                "2. Folder & Shortcut",
+                "3. Pemasangan",
+                "4. Selesai"
+            ]
         
         for i, step_text in enumerate(steps):
             is_active = (i == active_step_index)
@@ -131,16 +146,16 @@ class InstallerApp(ctk.CTk):
             )
             lbl.pack(fill="x", padx=15, pady=8)
             
+    # --- INSTALLATION FLOW ---
+    
     def show_step_license(self):
         self.update_sidebar_steps(0)
         
-        # Main Content Frame (right pane)
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
         self.content_frame.grid_columnconfigure(0, weight=1)
         self.content_frame.grid_rowconfigure(1, weight=1)
         
-        # Header
         lbl_title = ctk.CTkLabel(
             self.content_frame, text="Persetujuan Lisensi Pengguna", 
             font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
@@ -148,7 +163,6 @@ class InstallerApp(ctk.CTk):
         )
         lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
         
-        # License text in scrollable text
         license_box = ctk.CTkTextbox(self.content_frame, fg_color="#1E1E1E", font=ctk.CTkFont(family="Segoe UI", size=11))
         license_box.grid(row=1, column=0, sticky="nsew", pady=5)
         
@@ -172,7 +186,6 @@ class InstallerApp(ctk.CTk):
         license_box.insert("0.0", license_text)
         license_box.configure(state="disabled")
         
-        # Agreement checkbox
         self.agree_var = tk.BooleanVar(value=False)
         self.cb_agree = ctk.CTkCheckBox(
             self.content_frame, text="Saya menyetujui seluruh ketentuan di atas",
@@ -182,7 +195,6 @@ class InstallerApp(ctk.CTk):
         )
         self.cb_agree.grid(row=2, column=0, sticky="w", pady=15)
         
-        # Control Buttons
         self.btn_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.btn_frame.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         
@@ -211,7 +223,6 @@ class InstallerApp(ctk.CTk):
         self.content_frame.destroy()
         self.update_sidebar_steps(1)
         
-        # Step 1: Install Path and Shortcuts Options
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
         self.content_frame.grid_columnconfigure(0, weight=1)
@@ -223,7 +234,6 @@ class InstallerApp(ctk.CTk):
         )
         lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 20))
         
-        # Folder Destination path
         lbl_folder = ctk.CTkLabel(
             self.content_frame, text="Folder Tujuan:",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
@@ -237,7 +247,7 @@ class InstallerApp(ctk.CTk):
         
         self.entry_path = ctk.CTkEntry(self.path_frame, fg_color="#1E1E1E")
         self.entry_path.grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        self.entry_path.insert(0, self.default_install_path)
+        self.entry_path.insert(0, self.install_path)
         
         btn_browse = ctk.CTkButton(
             self.path_frame, text="Telusuri...", width=90,
@@ -246,7 +256,6 @@ class InstallerApp(ctk.CTk):
         )
         btn_browse.grid(row=0, column=1)
         
-        # Shortcut Option (Automatically checked)
         self.shortcut_var = tk.BooleanVar(value=True)
         cb_shortcut = ctk.CTkCheckBox(
             self.content_frame, text="Tambahkan ke Desktop (Buat Shortcut)",
@@ -256,7 +265,6 @@ class InstallerApp(ctk.CTk):
         )
         cb_shortcut.grid(row=3, column=0, sticky="w", pady=15)
         
-        # Control Buttons
         self.btn_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.btn_frame.grid(row=4, column=0, sticky="ew", pady=(35, 0))
         
@@ -296,7 +304,6 @@ class InstallerApp(ctk.CTk):
         self.content_frame.destroy()
         self.update_sidebar_steps(2)
         
-        # Step 2: Installation Progress
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
         self.content_frame.grid_columnconfigure(0, weight=1)
@@ -331,10 +338,8 @@ class InstallerApp(ctk.CTk):
                 import psutil
                 for proc in psutil.process_iter(['name', 'exe']):
                     try:
-                        # Kill by name
                         if proc.info['name'] and proc.info['name'].lower() == "bersihin.exe":
                             proc.kill()
-                        # Kill any process running from the target path
                         elif proc.info['exe'] and self.install_path.lower() in proc.info['exe'].lower():
                             proc.kill()
                     except Exception:
@@ -342,13 +347,11 @@ class InstallerApp(ctk.CTk):
             except Exception:
                 pass
                 
-            # Also run a taskkill command for Bersihin.exe just to be safe
             try:
                 subprocess.run(["taskkill", "/f", "/im", "Bersihin.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception:
                 pass
                 
-            # Wait a moment for Windows to release file handles
             import time
             time.sleep(1.5)
             
@@ -364,13 +367,11 @@ class InstallerApp(ctk.CTk):
                 self.destroy()
                 return
                 
-            import stat
             for item in os.listdir(self.src_folder):
                 s = os.path.join(self.src_folder, item)
                 d = os.path.join(self.install_path, item)
                 if os.path.isdir(s):
                     if os.path.exists(d):
-                        # Reset read-only attribute recursively to avoid PermissionError
                         for root, dirs, files in os.walk(d):
                             for file in files:
                                 p = os.path.join(root, file)
@@ -387,15 +388,25 @@ class InstallerApp(ctk.CTk):
                         except Exception:
                             pass
                     shutil.copy2(s, d)
-                    
+            
+            self.progress.set(0.6)
+            self.lbl_progress.configure(text="Membuat uninstaller...")
+            
+            # Copy installer to Uninstall.exe
+            if getattr(sys, 'frozen', False):
+                shutil.copy2(sys.executable, os.path.join(self.install_path, "Uninstall.exe"))
+            
             self.progress.set(0.7)
             
             if self.shortcut_var.get():
                 self.lbl_progress.configure(text="Membuat shortcut di Desktop...")
                 self.create_desktop_shortcut()
                 
-            self.progress.set(0.9)
+            self.progress.set(0.8)
+            self.lbl_progress.configure(text="Mendaftarkan ke Windows Control Panel...")
+            self.register_uninstall_registry()
             
+            self.progress.set(0.9)
             self.after(500, self.show_step_finished)
             
         except Exception as e:
@@ -406,13 +417,12 @@ class InstallerApp(ctk.CTk):
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")
         shortcut_path = os.path.join(desktop, "Bersihin.lnk")
         target_path = os.path.join(self.install_path, "Bersihin.exe")
-        icon_path = os.path.join(self.install_path, "assets", "logo.ico")
         
         ps_command = (
             f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_path}'); "
             f"$s.TargetPath = '{target_path}'; "
             f"$s.WorkingDirectory = '{self.install_path}'; "
-            f"$s.IconLocation = '{icon_path}'; "
+            f"$s.IconLocation = '{target_path},0'; "
             f"$s.Save();"
         )
         
@@ -421,12 +431,33 @@ class InstallerApp(ctk.CTk):
         except Exception as e:
             print("Failed to create shortcut:", e)
             
+    def register_uninstall_registry(self):
+        try:
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Bersihin"
+            key = winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY)
+            
+            uninst_exe = os.path.join(self.install_path, "Uninstall.exe")
+            icon_path = os.path.join(self.install_path, "assets", "logo.ico")
+            
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Bersihin")
+            winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'"{uninst_exe}" /uninstall')
+            winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, icon_path)
+            winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Arya AL")
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.0")
+            winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, self.install_path)
+            winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, 65000) # ~65 MB
+            winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
+            
+            winreg.CloseKey(key)
+        except Exception as e:
+            print("Failed to register uninstall registry:", e)
+            
     def show_step_finished(self):
         self.progress.set(1.0)
         self.content_frame.destroy()
         self.update_sidebar_steps(3)
         
-        # Step 3: Finished Screen
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
         self.content_frame.grid_columnconfigure(0, weight=1)
@@ -455,7 +486,6 @@ class InstallerApp(ctk.CTk):
         )
         cb_run.grid(row=2, column=0, sticky="w", pady=10)
         
-        # Finish Button
         btn_finish = ctk.CTkButton(
             self.content_frame, text="Selesai", width=120, height=35,
             fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
@@ -471,7 +501,196 @@ class InstallerApp(ctk.CTk):
             except Exception:
                 pass
         self.destroy()
+        
+    # --- UNINSTALLATION FLOW ---
+    
+    def show_uninstall_confirm(self):
+        self.update_sidebar_steps(0)
+        
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_title = ctk.CTkLabel(
+            self.content_frame, text="Hapus Instalan Bersihin", 
+            font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 20))
+        
+        lbl_desc = ctk.CTkLabel(
+            self.content_frame, text="Apakah Anda yakin ingin menghapus aplikasi Bersihin beserta seluruh komponennya dari komputer Anda?",
+            font=ctk.CTkFont(family="Segoe UI", size=14),
+            text_color="#CCCCCC", justify="left", wraplength=420
+        )
+        lbl_desc.grid(row=1, column=0, sticky="w", pady=(0, 30))
+        
+        self.btn_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        self.btn_frame.grid(row=2, column=0, sticky="ew", pady=(30, 0))
+        
+        self.btn_cancel = ctk.CTkButton(
+            self.btn_frame, text="Batal", width=100, height=35,
+            fg_color="#333333", hover_color="#444444", text_color="#FFFFFF",
+            command=self.destroy
+        )
+        self.btn_cancel.pack(side="left")
+        
+        self.btn_uninstall = ctk.CTkButton(
+            self.btn_frame, text="Hapus (Uninstall)", width=130, height=35,
+            fg_color="#EF4444", hover_color="#DC2626", text_color="#FFFFFF",
+            command=self.run_uninstall
+        )
+        self.btn_uninstall.pack(side="right")
+        
+    def run_uninstall(self):
+        self.content_frame.destroy()
+        self.update_sidebar_steps(1)
+        
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_title = ctk.CTkLabel(
+            self.content_frame, text="Menghapus Bersihin...", 
+            font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 20))
+        
+        self.lbl_progress = ctk.CTkLabel(
+            self.content_frame, text="Menyiapkan berkas penghapusan...",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#CCCCCC"
+        )
+        self.lbl_progress.grid(row=1, column=0, sticky="w", pady=5)
+        
+        self.progress = ctk.CTkProgressBar(self.content_frame, progress_color="#EF4444")
+        self.progress.grid(row=2, column=0, sticky="ew", pady=15)
+        self.progress.set(0)
+        
+        self.after(500, self.do_uninstall_files)
+        
+    def do_uninstall_files(self):
+        try:
+            self.progress.set(0.2)
+            self.lbl_progress.configure(text="Menghentikan aplikasi...")
+            
+            # Close active instances
+            try:
+                subprocess.run(["taskkill", "/f", "/im", "Bersihin.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            except Exception:
+                pass
+                
+            try:
+                import psutil
+                for proc in psutil.process_iter(['name', 'exe']):
+                    try:
+                        if proc.info['name'] and proc.info['name'].lower() == "bersihin.exe":
+                            proc.kill()
+                        elif proc.info['exe'] and self.install_path.lower() in proc.info['exe'].lower():
+                            proc.kill()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+                
+            import time
+            time.sleep(1.0)
+            
+            self.progress.set(0.4)
+            self.lbl_progress.configure(text="Menghapus shortcut Desktop...")
+            
+            # Delete Desktop Shortcut
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            shortcut_path = os.path.join(desktop, "Bersihin.lnk")
+            if os.path.exists(shortcut_path):
+                try:
+                    os.remove(shortcut_path)
+                except Exception:
+                    pass
+            
+            self.progress.set(0.6)
+            self.lbl_progress.configure(text="Menghapus registrasi sistem...")
+            
+            # Remove Registry Keys
+            try:
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY)
+                winreg.DeleteKey(key, "Bersihin")
+                winreg.CloseKey(key)
+            except Exception as e:
+                print("Registry deletion failed:", e)
+                
+            self.progress.set(0.8)
+            self.lbl_progress.configure(text="Menghapus file program...")
+            
+            # Trigger self-deleting batch file since Uninstall.exe cannot delete itself while running
+            self.trigger_self_delete()
+            
+            self.progress.set(1.0)
+            self.after(500, self.show_uninstall_finished)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Terjadi kesalahan saat menghapus:\n{e}")
+            self.destroy()
+            
+    def trigger_self_delete(self):
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        bat_path = os.path.join(temp_dir, "uninstall_bersihin.bat")
+        
+        # Batch script that waits for Uninstall.exe to exit, deletes the Bersihin directory, and self-deletes
+        bat_content = (
+            "@echo off\n"
+            ":loop\n"
+            'tasklist | findstr /i "Uninstall.exe" > nul\n'
+            "if %errorlevel%==0 (\n"
+            "    timeout /t 1 /nobreak > nul\n"
+            "    goto loop\n"
+            ")\n"
+            f'rmdir /s /q "{self.install_path}"\n'
+            'del "%~f0"\n'
+        )
+        
+        try:
+            with open(bat_path, "w") as f:
+                f.write(bat_content)
+                
+            # Run batch file in detached, hidden state
+            subprocess.Popen([bat_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        except Exception as e:
+            print("Failed to write self-delete script:", e)
+            
+    def show_uninstall_finished(self):
+        self.content_frame.destroy()
+        self.update_sidebar_steps(2)
+        
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_title = ctk.CTkLabel(
+            self.content_frame, text="Penghapusan Selesai", 
+            font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"),
+            text_color="#10B981"
+        )
+        lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 15))
+        
+        lbl_desc = ctk.CTkLabel(
+            self.content_frame, text="Aplikasi Bersihin beserta seluruh datanya telah berhasil dihapus dari komputer Anda.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#CCCCCC", justify="left", wraplength=420
+        )
+        lbl_desc.grid(row=1, column=0, sticky="w", pady=(0, 25))
+        
+        btn_finish = ctk.CTkButton(
+            self.content_frame, text="Selesai", width=120, height=35,
+            fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+            command=self.destroy
+        )
+        btn_finish.grid(row=2, column=0, sticky="e", pady=(35, 0))
 
 if __name__ == "__main__":
-    app = InstallerApp()
+    is_uninstall = "/uninstall" in sys.argv or "--uninstall" in sys.argv
+    app = InstallerApp(is_uninstall=is_uninstall)
     app.mainloop()
