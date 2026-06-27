@@ -25,6 +25,7 @@ def build_setup():
         "--uac-admin",
         "--icon=assets/logo.ico",
         "--add-data=Bersihin;Bersihin",
+        "--add-data=assets/logo.png;assets",
         "--paths=src",
         "--collect-all=customtkinter",
         "installer.py"

@@ -5,6 +5,7 @@ import subprocess
 import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
+from PIL import Image
 
 # Set dark theme
 ctk.set_appearance_mode("Dark")
@@ -14,51 +15,125 @@ class InstallerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Bersihin Setup Wizard")
-        self.geometry("600x420")
+        self.geometry("680x440")
         self.resizable(False, False)
         
         # Center the window
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
-        x = (screen_width - 600) // 2
-        y = (screen_height - 420) // 2
-        self.geometry(f"600x420+{x}+{y}")
+        x = (screen_width - 680) // 2
+        y = (screen_height - 440) // 2
+        self.geometry(f"680x440+{x}+{y}")
         
         # Determine resource path (bundled by PyInstaller)
         if getattr(sys, 'frozen', False):
             self.src_folder = os.path.join(sys._MEIPASS, "Bersihin")
+            self.logo_path = os.path.join(sys._MEIPASS, "assets", "logo.png")
         else:
             self.src_folder = os.path.abspath("Bersihin")
+            self.logo_path = os.path.abspath(os.path.join("assets", "logo.png"))
             
-        # Default Install Path: Program Files folder
+        # Default Install Path: Program Files
         program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
         self.default_install_path = os.path.join(program_files, "Bersihin")
         
-        # Current step: 0 = License, 1 = Options, 2 = Installing, 3 = Finished
-        self.current_step = 0
-        
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
         
+        # Load logo image
+        self.logo_img = None
+        if os.path.exists(self.logo_path):
+            try:
+                img = Image.open(self.logo_path)
+                self.logo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(64, 64))
+            except Exception as e:
+                print("Failed to load logo image:", e)
+                
+        # Draw Layout
+        self.draw_sidebar()
         self.show_step_license()
         
+    def draw_sidebar(self):
+        # Left Sidebar Frame
+        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#0F172A")
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_propagate(False)
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
+        
+        # Logo Label
+        if self.logo_img:
+            self.lbl_logo = ctk.CTkLabel(self.sidebar_frame, image=self.logo_img, text="")
+            self.lbl_logo.grid(row=0, column=0, pady=(35, 10))
+        else:
+            # Fallback text logo
+            self.lbl_logo = ctk.CTkLabel(
+                self.sidebar_frame, text="🛡️", 
+                font=ctk.CTkFont(size=40)
+            )
+            self.lbl_logo.grid(row=0, column=0, pady=(35, 10))
+            
+        # Branded Header
+        self.lbl_brand = ctk.CTkLabel(
+            self.sidebar_frame, text="BERSIHIN",
+            font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+            text_color="#3B82F6"
+        )
+        self.lbl_brand.grid(row=1, column=0, pady=(0, 5))
+        
+        self.lbl_sub = ctk.CTkLabel(
+            self.sidebar_frame, text="Setup Wizard",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color="#64748B"
+        )
+        self.lbl_sub.grid(row=2, column=0, pady=(0, 30))
+        
+        # Steps container
+        self.steps_container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        self.steps_container.grid(row=3, column=0, sticky="nsew", padx=10)
+        self.steps_container.grid_columnconfigure(0, weight=1)
+        
+    def update_sidebar_steps(self, active_step_index):
+        for w in self.steps_container.winfo_children():
+            w.destroy()
+            
+        steps = [
+            "1. Persetujuan Lisensi",
+            "2. Folder & Shortcut",
+            "3. Pemasangan",
+            "4. Selesai"
+        ]
+        
+        for i, step_text in enumerate(steps):
+            is_active = (i == active_step_index)
+            color = "#3B82F6" if is_active else "#64748B"
+            font_weight = "bold" if is_active else "normal"
+            
+            lbl = ctk.CTkLabel(
+                self.steps_container, text=step_text,
+                font=ctk.CTkFont(family="Segoe UI", size=13, weight=font_weight),
+                text_color=color, anchor="w"
+            )
+            lbl.pack(fill="x", padx=15, pady=8)
+            
     def show_step_license(self):
-        # Step 0: License Agreement
-        self.frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame.grid(row=0, column=0, padx=25, pady=20, sticky="nsew")
-        self.frame.grid_columnconfigure(0, weight=1)
-        self.frame.grid_rowconfigure(1, weight=1)
+        self.update_sidebar_steps(0)
+        
+        # Main Content Frame (right pane)
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_rowconfigure(1, weight=1)
         
         # Header
         lbl_title = ctk.CTkLabel(
-            self.frame, text="Persetujuan Lisensi Pengguna", 
+            self.content_frame, text="Persetujuan Lisensi Pengguna", 
             font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
             text_color="#FFFFFF"
         )
         lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
         
         # License text in scrollable text
-        license_box = ctk.CTkTextbox(self.frame, fg_color="#1E1E1E", font=ctk.CTkFont(family="Segoe UI", size=11))
+        license_box = ctk.CTkTextbox(self.content_frame, fg_color="#1E1E1E", font=ctk.CTkFont(family="Segoe UI", size=11))
         license_box.grid(row=1, column=0, sticky="nsew", pady=5)
         
         license_text = (
@@ -84,7 +159,7 @@ class InstallerApp(ctk.CTk):
         # Agreement checkbox
         self.agree_var = tk.BooleanVar(value=False)
         self.cb_agree = ctk.CTkCheckBox(
-            self.frame, text="Saya menyetujui seluruh ketentuan di atas",
+            self.content_frame, text="Saya menyetujui seluruh ketentuan di atas",
             variable=self.agree_var, command=self.toggle_agree,
             font=ctk.CTkFont(family="Segoe UI", size=12),
             fg_color="#3B82F6"
@@ -92,7 +167,7 @@ class InstallerApp(ctk.CTk):
         self.cb_agree.grid(row=2, column=0, sticky="w", pady=15)
         
         # Control Buttons
-        self.btn_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        self.btn_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.btn_frame.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         
         self.btn_cancel = ctk.CTkButton(
@@ -117,15 +192,16 @@ class InstallerApp(ctk.CTk):
             self.btn_next.configure(state="disabled")
             
     def show_step_options(self):
-        self.frame.destroy()
+        self.content_frame.destroy()
+        self.update_sidebar_steps(1)
         
         # Step 1: Install Path and Shortcuts Options
-        self.frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame.grid(row=0, column=0, padx=25, pady=20, sticky="nsew")
-        self.frame.grid_columnconfigure(0, weight=1)
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
         
         lbl_title = ctk.CTkLabel(
-            self.frame, text="Pilihan Instalasi", 
+            self.content_frame, text="Pilihan Instalasi", 
             font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
             text_color="#FFFFFF"
         )
@@ -133,13 +209,13 @@ class InstallerApp(ctk.CTk):
         
         # Folder Destination path
         lbl_folder = ctk.CTkLabel(
-            self.frame, text="Folder Tujuan:",
+            self.content_frame, text="Folder Tujuan:",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             text_color="#CCCCCC"
         )
         lbl_folder.grid(row=1, column=0, sticky="w", pady=(5, 2))
         
-        self.path_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        self.path_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.path_frame.grid(row=2, column=0, sticky="ew", pady=(0, 15))
         self.path_frame.grid_columnconfigure(0, weight=1)
         
@@ -157,7 +233,7 @@ class InstallerApp(ctk.CTk):
         # Shortcut Option (Automatically checked)
         self.shortcut_var = tk.BooleanVar(value=True)
         cb_shortcut = ctk.CTkCheckBox(
-            self.frame, text="Tambahkan ke Desktop (Buat Shortcut)",
+            self.content_frame, text="Tambahkan ke Desktop (Buat Shortcut)",
             variable=self.shortcut_var,
             font=ctk.CTkFont(family="Segoe UI", size=13),
             fg_color="#3B82F6"
@@ -165,7 +241,7 @@ class InstallerApp(ctk.CTk):
         cb_shortcut.grid(row=3, column=0, sticky="w", pady=15)
         
         # Control Buttons
-        self.btn_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        self.btn_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.btn_frame.grid(row=4, column=0, sticky="ew", pady=(35, 0))
         
         btn_back = ctk.CTkButton(
@@ -192,7 +268,7 @@ class InstallerApp(ctk.CTk):
             self.entry_path.insert(0, folder)
             
     def back_to_license(self):
-        self.frame.destroy()
+        self.content_frame.destroy()
         self.show_step_license()
         
     def run_install(self):
@@ -201,28 +277,29 @@ class InstallerApp(ctk.CTk):
             messagebox.showerror("Error", "Folder tujuan tidak boleh kosong.")
             return
             
-        self.frame.destroy()
+        self.content_frame.destroy()
+        self.update_sidebar_steps(2)
         
         # Step 2: Installation Progress
-        self.frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame.grid(row=0, column=0, padx=25, pady=20, sticky="nsew")
-        self.frame.grid_columnconfigure(0, weight=1)
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
         
         lbl_title = ctk.CTkLabel(
-            self.frame, text="Memasang Bersihin...", 
+            self.content_frame, text="Memasang Bersihin...", 
             font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
             text_color="#FFFFFF"
         )
         lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 20))
         
         self.lbl_progress = ctk.CTkLabel(
-            self.frame, text="Menyiapkan berkas instalasi...",
+            self.content_frame, text="Menyiapkan berkas instalasi...",
             font=ctk.CTkFont(family="Segoe UI", size=13),
             text_color="#CCCCCC"
         )
         self.lbl_progress.grid(row=1, column=0, sticky="w", pady=5)
         
-        self.progress = ctk.CTkProgressBar(self.frame, progress_color="#3B82F6")
+        self.progress = ctk.CTkProgressBar(self.content_frame, progress_color="#3B82F6")
         self.progress.grid(row=2, column=0, sticky="ew", pady=15)
         self.progress.set(0)
         
@@ -287,23 +364,24 @@ class InstallerApp(ctk.CTk):
             
     def show_step_finished(self):
         self.progress.set(1.0)
-        self.frame.destroy()
+        self.content_frame.destroy()
+        self.update_sidebar_steps(3)
         
         # Step 3: Finished Screen
-        self.frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame.grid(row=0, column=0, padx=25, pady=20, sticky="nsew")
-        self.frame.grid_columnconfigure(0, weight=1)
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=0, column=1, padx=25, pady=20, sticky="nsew")
+        self.content_frame.grid_columnconfigure(0, weight=1)
         
         lbl_title = ctk.CTkLabel(
-            self.frame, text="Instalasi Selesai!", 
+            self.content_frame, text="Instalasi Selesai!", 
             font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"),
             text_color="#10B981"
         )
         lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 15))
         
         lbl_desc = ctk.CTkLabel(
-            self.frame, text=f"Aplikasi Bersihin berhasil dipasang pada komputer Anda.\n\n"
-                             f"Lokasi instalasi:\n{self.install_path}",
+            self.content_frame, text=f"Aplikasi Bersihin berhasil dipasang pada komputer Anda.\n\n"
+                                     f"Lokasi instalasi:\n{self.install_path}",
             font=ctk.CTkFont(family="Segoe UI", size=13),
             text_color="#CCCCCC", justify="left"
         )
@@ -311,7 +389,7 @@ class InstallerApp(ctk.CTk):
         
         self.run_now_var = tk.BooleanVar(value=True)
         cb_run = ctk.CTkCheckBox(
-            self.frame, text="Jalankan Bersihin Sekarang",
+            self.content_frame, text="Jalankan Bersihin Sekarang",
             variable=self.run_now_var,
             font=ctk.CTkFont(family="Segoe UI", size=13),
             fg_color="#3B82F6"
@@ -320,7 +398,7 @@ class InstallerApp(ctk.CTk):
         
         # Finish Button
         btn_finish = ctk.CTkButton(
-            self.frame, text="Selesai", width=120, height=35,
+            self.content_frame, text="Selesai", width=120, height=35,
             fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
             command=self.finish_installer
         )
