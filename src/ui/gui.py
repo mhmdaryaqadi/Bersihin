@@ -1146,7 +1146,7 @@ class GameBoostFrame(ctk.CTkFrame):
             fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
             height=38, command=self.add_custom_game_exe
         )
-        btn_add.grid(row=2, column=0, pady=15, padx=20, fill="x", sticky="ew")
+        btn_add.grid(row=2, column=0, pady=15, padx=20, sticky="ew")
         
         # Right Panel: Status / Suspended processes
         self.right_panel = ctk.CTkFrame(self.container, fg_color="#1E1E1E", corner_radius=12)
