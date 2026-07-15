@@ -632,47 +632,40 @@ class FileCleanerFrame(ctk.CTkFrame):
         self.scroll_frame.grid(row=2, column=0, padx=20, pady=5, sticky="nsew")
         self.scroll_frame.columnconfigure(0, weight=1)
         
-        # Build target items
+        # Build target items grouped into Recommended and Advanced
         self.targets = file_cleaner.get_clean_targets()
         self.ui_elements = {}
         
         row_idx = 0
         is_admin = memory_cleaner.is_admin()
         
-        for key, info in self.targets.items():
-            # Container for each target (using standard tk.Frame for high performance redraws)
-            item_frame = tk.Frame(self.scroll_frame, bg="#1E1E1E")
-            item_frame.grid(row=row_idx, column=0, padx=10, pady=8, sticky="ew")
-            item_frame.columnconfigure(1, weight=1)
+        # Split targets
+        recommended_targets = {k: v for k, v in self.targets.items() if not v.get('is_advanced')}
+        advanced_targets = {k: v for k, v in self.targets.items() if v.get('is_advanced')}
+        
+        # 1. Recommended Category Header
+        lbl_rec_header = ctk.CTkLabel(
+            self.scroll_frame, text="PEMBERSIHAN REKOMENDASI (Aman dibersihkan secara rutin)",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color="#3B82F6"
+        )
+        lbl_rec_header.grid(row=row_idx, column=0, padx=10, pady=(10, 5), sticky="w")
+        row_idx += 1
+        
+        for key, info in recommended_targets.items():
+            row_idx = self.create_target_row(key, info, True, row_idx, is_admin)
             
-            # Checkbox variable
-            cb_var = tk.BooleanVar(value=True)
-            self.checkbox_vars[key] = cb_var
-            
-            # Checkbox
-            checkbox = ctk.CTkCheckBox(item_frame, text=info['name'], variable=cb_var, font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"))
-            checkbox.grid(row=0, column=0, sticky="w")
-            
-            # Size Label (initially empty or scanning)
-            size_lbl = ctk.CTkLabel(item_frame, text="Menunggu pemindaian...", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#3B82F6")
-            size_lbl.grid(row=0, column=2, padx=10, sticky="e")
-            
-            # Description
-            desc_lbl = ctk.CTkLabel(item_frame, text=info['desc'], font=ctk.CTkFont(family="Segoe UI", size=11), text_color="#888888")
-            desc_lbl.grid(row=1, column=0, columnspan=3, padx=(28, 0), pady=(2, 0), sticky="w")
-            
-            # Admin warning badge if required but not admin
-            if info.get('requires_admin') and not is_admin:
-                # Keep checkbox enabled, but append notice to description
-                desc_lbl.configure(text=f"(Butuh Admin) {info['desc']}")
-                
-            self.ui_elements[key] = {
-                'frame': item_frame,
-                'checkbox': checkbox,
-                'size_lbl': size_lbl,
-                'desc_lbl': desc_lbl
-            }
-            row_idx += 1
+        # 2. Advanced Category Header
+        lbl_adv_header = ctk.CTkLabel(
+            self.scroll_frame, text="TINDAKAN LANJUTAN / ADVANCED (Unchecked secara default)",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color="#EF4444"
+        )
+        lbl_adv_header.grid(row=row_idx, column=0, padx=10, pady=(20, 5), sticky="w")
+        row_idx += 1
+        
+        for key, info in advanced_targets.items():
+            row_idx = self.create_target_row(key, info, False, row_idx, is_admin)
             
         # Action Buttons frame
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -696,6 +689,40 @@ class FileCleanerFrame(ctk.CTkFrame):
         )
         self.btn_clean.grid(row=0, column=1, padx=10, sticky="ew")
         self.btn_clean.configure(state="disabled") # Disabled until scanned
+
+    def create_target_row(self, key, info, default_val, row_idx, is_admin):
+        # Container for each target (using standard tk.Frame for high performance redraws)
+        item_frame = tk.Frame(self.scroll_frame, bg="#1E1E1E")
+        item_frame.grid(row=row_idx, column=0, padx=10, pady=6, sticky="ew")
+        item_frame.columnconfigure(1, weight=1)
+        
+        # Checkbox variable
+        cb_var = tk.BooleanVar(value=default_val)
+        self.checkbox_vars[key] = cb_var
+        
+        # Checkbox
+        checkbox = ctk.CTkCheckBox(item_frame, text=info['name'], variable=cb_var, font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"))
+        checkbox.grid(row=0, column=0, sticky="w")
+        
+        # Size Label (initially empty or scanning)
+        size_lbl = ctk.CTkLabel(item_frame, text="Menunggu pemindaian...", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#3B82F6")
+        size_lbl.grid(row=0, column=2, padx=10, sticky="e")
+        
+        # Description
+        desc_lbl = ctk.CTkLabel(item_frame, text=info['desc'], font=ctk.CTkFont(family="Segoe UI", size=11), text_color="#888888")
+        desc_lbl.grid(row=1, column=0, columnspan=3, padx=(28, 0), pady=(2, 0), sticky="w")
+        
+        # Admin warning badge if required but not admin
+        if info.get('requires_admin') and not is_admin:
+            desc_lbl.configure(text=f"(Butuh Admin) {info['desc']}")
+            
+        self.ui_elements[key] = {
+            'frame': item_frame,
+            'checkbox': checkbox,
+            'size_lbl': size_lbl,
+            'desc_lbl': desc_lbl
+        }
+        return row_idx + 1
 
     def format_size(self, size_bytes):
         """Converts bytes to readable string (KB, MB, GB)."""
@@ -1688,9 +1715,32 @@ class AppManagerFrame(ctk.CTkFrame):
             )
             btn_uninstall.grid(row=0, column=1, padx=15, pady=10, sticky="e")
             
+            # Right-click context menu for Advanced Uninstall ("Hapus Total")
+            context_menu = tk.Menu(row, tearoff=0, bg="#1E1E1E", fg="#FFFFFF", activebackground="#3B82F6", activeforeground="#FFFFFF")
+            context_menu.add_command(
+                label="Hapus Total (Advanced Uninstall)", 
+                command=lambda a=app: self.confirm_right_click_uninstall(a)
+            )
+            
+            def show_context_menu(event, menu=context_menu):
+                menu.post(event.x_root, event.y_root)
+                
+            row.bind("<Button-3>", show_context_menu)
+            lbl_name.bind("<Button-3>", show_context_menu)
+            
             self.app_widgets.append((app['name'].lower(), row))
             
         self.filter_installed_apps()
+
+    def confirm_right_click_uninstall(self, app):
+        confirm = messagebox.askyesno(
+            "Konfirmasi Hapus Total",
+            f"Apakah Anda yakin ingin menghapus total '{app['name']}'?\n\n"
+            "Tindakan ini akan menjalankan uninstaller resmi, memindai sisa berkas di folder Program Files/AppData, "
+            "dan membersihkan entri registry yang tertinggal."
+        )
+        if confirm:
+            self.run_uninstall(app, "advanced")
 
     def confirm_uninstall(self, app):
         dialog = tk.Toplevel(self)
