@@ -2077,12 +2077,13 @@ class App(ctk.CTk):
         # Pemuatan sesi login & pengaturan lokal
         session = self.load_session()
         self.load_settings()
-        
         self.floating_widget = None
         if getattr(self, 'floating_widget_enabled', False):
             self.after(2000, lambda: self.toggle_floating_widget(True))
         
-
+        self.overlay_window = None
+        self.register_global_hotkey()
+        self.start_game_detection_scanner()
 
         if session:
             # Pengecekan status blokir secara instan di background
@@ -2090,6 +2091,107 @@ class App(ctk.CTk):
             self.initialize_main_app(start_minimized)
         else:
             self.show_login_screen()
+
+    def register_global_hotkey(self):
+        def toggle_overlay():
+            self.after(0, self.toggle_game_overlay)
+            
+        def hotkey_listener():
+            try:
+                import ctypes
+                from ctypes import wintypes
+                user32 = ctypes.windll.user32
+                VK_INSERT = 0x2D # VK_INSERT
+                HOTKEY_ID = 99
+                
+                # Unregister first to prevent duplicate bindings
+                user32.UnregisterHotKey(None, HOTKEY_ID)
+                
+                if not user32.RegisterHotKey(None, HOTKEY_ID, 0, VK_INSERT):
+                    print("Failed to register Insert hotkey")
+                    return
+                    
+                msg = wintypes.MSG()
+                while True:
+                    if user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+                        if msg.message == 0x0312: # WM_HOTKEY
+                            if msg.wParam == HOTKEY_ID:
+                                toggle_overlay()
+                        user32.TranslateMessage(ctypes.byref(msg))
+                        user32.DispatchMessageW(ctypes.byref(msg))
+                    else:
+                        break
+            except Exception as e:
+                print("Hotkey listener error:", e)
+                
+        threading.Thread(target=hotkey_listener, daemon=True).start()
+
+    def toggle_game_overlay(self):
+        if self.overlay_window and self.overlay_window.winfo_exists():
+            self.overlay_window.destroy()
+            self.overlay_window = None
+            self.show_status("Game Overlay ditutup.")
+        else:
+            self.overlay_window = GameOverlayWindow(self)
+            self.show_status("Game Overlay dibuka. Tekan [Insert] untuk menutup.")
+
+    def start_game_detection_scanner(self):
+        def scanner():
+            game_keywords = {
+                'csgo.exe': 'CS:GO / CS2',
+                'cs2.exe': 'Counter-Strike 2',
+                'valorant.exe': 'Valorant',
+                'gta5.exe': 'GTA V',
+                'rdr2.exe': 'Red Dead Redemption 2',
+                'cyberpunk2077.exe': 'Cyberpunk 2077',
+                'minecraft.exe': 'Minecraft',
+                'fortniteclient-win64-shipping.exe': 'Fortnite',
+                'dota2.exe': 'Dota 2',
+                'league of legends.exe': 'League of Legends',
+                'genshinimpact.exe': 'Genshin Impact',
+                'fifa.exe': 'FIFA/EA Sports FC',
+                'fc24.exe': 'EA Sports FC 24',
+                'apexlegends.exe': 'Apex Legends',
+                'robloxplayerbeta.exe': 'Roblox'
+            }
+            boosted_games = set()
+            while True:
+                try:
+                    import psutil
+                    import subprocess
+                    found_game = None
+                    for proc in psutil.process_iter(['name']):
+                        try:
+                            name_lower = proc.info['name'].lower()
+                            if name_lower in game_keywords:
+                                found_game = (name_lower, game_keywords[name_lower])
+                                break
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+                            
+                    if found_game:
+                        game_exe, game_name = found_game
+                        if game_exe not in boosted_games:
+                            boosted_games.add(game_exe)
+                            # Auto boost
+                            try:
+                                subprocess.run("powercfg /s 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                            except:
+                                pass
+                            import memory_cleaner
+                            memory_cleaner.clean_process_working_sets()
+                            if memory_cleaner.is_admin():
+                                memory_cleaner.clean_system_file_cache()
+                                memory_cleaner.clean_standby_list()
+                                
+                            self.after(0, lambda name=game_name: self.show_game_detected_notification(name))
+                except Exception as e:
+                    print("Game scanner error:", e)
+                time.sleep(10)
+        threading.Thread(target=scanner, daemon=True).start()
+
+    def show_game_detected_notification(self, game_name):
+        GameToastNotification(self, game_name)
 
     def setup_tray_icon(self):
         """Set up the system tray icon using pystray."""
@@ -2201,9 +2303,8 @@ class App(ctk.CTk):
         self.create_nav_button("Manajer Aplikasi", AppManagerFrame, 5)
         self.create_nav_button("File Besar", LargeFileFinderFrame, 6)
         self.create_nav_button("Pembersih Registry", RegistryCleanerFrame, 7)
-        self.create_nav_button("Klik Kanan", ContextMenuManagerFrame, 8)
-        self.create_nav_button("Optimasi Internet", InternetSpeedBoosterFrame, 9)
-        self.create_nav_button("Pengaturan", SettingsFrame, 10)
+        self.create_nav_button("Optimasi Internet", InternetSpeedBoosterFrame, 8)
+        self.create_nav_button("Pengaturan", SettingsFrame, 9)
             
         # Right Side Content Container Frame
         self.container = ctk.CTkFrame(self, fg_color="#121212", corner_radius=0)
@@ -2237,7 +2338,7 @@ class App(ctk.CTk):
         # Load and stack screen frames
         self.frames = {}
         for F in (DashboardFrame, RAMCleanerFrame, FileCleanerFrame, GameBoostFrame, AppManagerFrame, 
-                  LargeFileFinderFrame, RegistryCleanerFrame, ContextMenuManagerFrame, InternetSpeedBoosterFrame, SettingsFrame):
+                  LargeFileFinderFrame, RegistryCleanerFrame, InternetSpeedBoosterFrame, SettingsFrame):
             frame = F(self.container, self)
             self.frames[F] = frame
             
@@ -3226,3 +3327,232 @@ class InternetSpeedBoosterFrame(ctk.CTkFrame):
         msg += "✓ Soket Winsock jaringan berhasil direset."
         
         messagebox.showinfo("Optimasi Selesai", msg)
+
+class GameToastNotification(ctk.CTkToplevel):
+    """Sleek bottom-right toast notification when a game is detected."""
+    def __init__(self, parent, game_name):
+        super().__init__(parent)
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.95)
+        self.configure(fg_color="#121212")
+        
+        width = 320
+        height = 85
+        
+        # Bottom-right corner placement
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = screen_w - width - 20
+        y = screen_h - height - 60
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Styled container card with green border
+        card = ctk.CTkFrame(self, width=width, height=height, fg_color="#1A1A1A", border_width=2, border_color="#10B981", corner_radius=10)
+        card.place(x=0, y=0)
+        card.pack_propagate(False)
+        
+        # Icon / Header
+        lbl_header = ctk.CTkLabel(card, text="🎮 GAME MODE AKTIF", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color="#10B981")
+        lbl_header.pack(anchor="w", padx=15, pady=(8, 2))
+        
+        # Message text
+        lbl_msg = ctk.CTkLabel(
+            card,
+            text=f"Terdeteksi: {game_name}\nRAM dibersihkan & CPU dioptimalkan! Tekan [Insert] untuk HUD.",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color="#FFFFFF",
+            justify="left"
+        )
+        lbl_msg.pack(anchor="w", padx=15, pady=(0, 5))
+        
+        # Auto-destroy after 5 seconds
+        self.after(5000, self.destroy)
+
+class GameOverlayWindow(ctk.CTkToplevel):
+    """Sleek borderless gaming HUD overlay toggled via global hotkey [Insert]."""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        
+        # Configure borderless window
+        self.title("Bersihin Overlay")
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.92) # Transparent glassmorphism style
+        self.configure(fg_color="#121212")
+        
+        # Overlay dimensions
+        self.width = 360
+        self.height = 280
+        
+        # Center of the screen
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - self.width) // 2
+        y = (screen_h - self.height) // 2
+        self.geometry(f"{self.width}x{self.height}+{x}+{y}")
+        
+        # Outer Border Card with neon purple glow
+        self.card = ctk.CTkFrame(self, width=self.width, height=self.height, fg_color="#1A1A1A", border_width=2, border_color="#A855F7", corner_radius=12)
+        self.card.place(x=0, y=0)
+        self.card.pack_propagate(False)
+        
+        # Neon gaming header
+        title_lbl = ctk.CTkLabel(
+            self.card, text="🎮 BERSIHIN GAME OVERLAY",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color="#A855F7"
+        )
+        title_lbl.pack(pady=(15, 10))
+        
+        # Bind mouse events to make overlay draggable
+        self.card.bind("<Button-1>", self.start_drag)
+        self.card.bind("<B1-Motion>", self.drag)
+        title_lbl.bind("<Button-1>", self.start_drag)
+        title_lbl.bind("<B1-Motion>", self.drag)
+        
+        # 1. Real-time Telemetry Frame (CPU, RAM)
+        self.telemetry_frame = ctk.CTkFrame(self.card, fg_color="#121212", height=70, corner_radius=8)
+        self.telemetry_frame.pack(fill="x", padx=20, pady=5)
+        self.telemetry_frame.pack_propagate(False)
+        
+        # CPU Info
+        self.cpu_lbl = ctk.CTkLabel(self.telemetry_frame, text="CPU: 0%", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color="#FFFFFF")
+        self.cpu_lbl.place(x=15, y=10)
+        self.cpu_bar = ctk.CTkProgressBar(self.telemetry_frame, width=120, height=8, progress_color="#3B82F6", fg_color="#333333")
+        self.cpu_bar.place(x=15, y=35)
+        self.cpu_bar.set(0)
+        
+        # RAM Info
+        self.ram_lbl = ctk.CTkLabel(self.telemetry_frame, text="RAM: 0%", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color="#FFFFFF")
+        self.ram_lbl.place(x=185, y=10)
+        self.ram_bar = ctk.CTkProgressBar(self.telemetry_frame, width=120, height=8, progress_color="#10B981", fg_color="#333333")
+        self.ram_bar.place(x=185, y=35)
+        self.ram_bar.set(0)
+        
+        # 2. Game Mode Switch
+        self.switch_frame = ctk.CTkFrame(self.card, fg_color="transparent")
+        self.switch_frame.pack(fill="x", padx=20, pady=8)
+        
+        # Retrieve current Game Boost status
+        import subprocess
+        self.is_boosted = False
+        try:
+            out = subprocess.check_output("powercfg /getactivescheme", shell=True).decode()
+            if "8c5e7fda" in out.lower(): # High performance plan GUID
+                self.is_boosted = True
+        except:
+            pass
+            
+        self.boost_var = ctk.BooleanVar(value=self.is_boosted)
+        self.switch_boost = ctk.CTkSwitch(
+            self.switch_frame, text="Ultra Game Boost (High Performance CPU)",
+            variable=self.boost_var,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            progress_color="#A855F7",
+            command=self.toggle_boost
+        )
+        self.switch_boost.pack(side="left")
+        
+        # 3. Clean RAM Button
+        self.btn_clean = ctk.CTkButton(
+            self.card, text="⚡ Bersihkan Memori Sekarang",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            fg_color="#10B981", hover_color="#059669", text_color="#FFFFFF",
+            height=35, corner_radius=8, command=self.quick_clean_ram
+        )
+        self.btn_clean.pack(fill="x", padx=20, pady=10)
+        
+        # Status notice
+        self.lbl_info = ctk.CTkLabel(
+            self.card, text="Tekan tombol [Insert] untuk menutup Overlay",
+            font=ctk.CTkFont(family="Segoe UI", size=10, slant="italic"),
+            text_color="#666666"
+        )
+        self.lbl_info.pack(pady=(5, 10))
+        
+        # Start update loops
+        self.update_telemetry()
+        
+    def start_drag(self, event):
+        self.drag_x = event.x
+        self.drag_y = event.y
+
+    def drag(self, event):
+        x = self.winfo_x() + (event.x - self.drag_x)
+        y = self.winfo_y() + (event.y - self.drag_y)
+        self.geometry(f"+{x}+{y}")
+        
+    def update_telemetry(self):
+        if not self.winfo_exists():
+            return
+        try:
+            import psutil
+            cpu = psutil.cpu_percent()
+            ram = psutil.virtual_memory().percent
+            
+            self.cpu_lbl.configure(text=f"CPU: {cpu:.0f}%")
+            self.cpu_bar.set(cpu / 100.0)
+            
+            self.ram_lbl.configure(text=f"RAM: {ram:.0f}%")
+            self.ram_bar.set(ram / 100.0)
+        except:
+            pass
+        self.after(1000, self.update_telemetry)
+        
+    def toggle_boost(self):
+        active = self.boost_var.get()
+        import subprocess
+        import memory_cleaner
+        try:
+            if active:
+                # Set to High Performance plan
+                subprocess.run("powercfg /s 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                # Suspend non-essential processes to free CPU cycles
+                self.suspended_pids = memory_cleaner.suspend_non_essential_processes(exclude_pids=[os.getpid()])
+                self.btn_clean.configure(text=f"⚡ Game Mode: AKTIF ({len(self.suspended_pids)} Suspended)")
+                self.lbl_info.configure(text=f"Game Boost Aktif. Menangguhkan {len(self.suspended_pids)} proses.", text_color="#A855F7")
+            else:
+                # Set to Balanced plan
+                subprocess.run("powercfg /s 381b4222-f694-41f0-9685-ff5bb260df2e", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                # Resume suspended processes
+                if hasattr(self, 'suspended_pids') and self.suspended_pids:
+                    memory_cleaner.resume_suspended_processes(self.suspended_pids)
+                    self.suspended_pids = []
+                self.btn_clean.configure(text="⚡ Bersihkan Memori Sekarang")
+                self.lbl_info.configure(text="Tekan tombol [Insert] untuk menutup Overlay", text_color="#666666")
+        except Exception as e:
+            print("Failed to change power scheme / suspend:", e)
+            
+    def quick_clean_ram(self):
+        # Disable button during clean
+        self.btn_clean.configure(state="disabled", text="Membersihkan...")
+        
+        def run():
+            import memory_cleaner
+            import time
+            ram_before = memory_cleaner.get_ram_usage()['used']
+            
+            # Clean working set, cache, and standby list
+            memory_cleaner.clean_process_working_sets()
+            if memory_cleaner.is_admin():
+                memory_cleaner.clean_system_file_cache()
+                memory_cleaner.clean_standby_list()
+                
+            time.sleep(0.5)
+            ram_after = memory_cleaner.get_ram_usage()['used']
+            freed = max(0, ram_before - ram_after)
+            freed_mb = freed / (1024 * 1024)
+            
+            # Update label on UI thread
+            def update_ui():
+                self.btn_clean.configure(state="normal", text="⚡ Bersihkan Memori Sekarang")
+                # Show flash alert
+                self.lbl_info.configure(text=f"RAM Dibersihkan: +{freed_mb:.0f} MB!", text_color="#10B981")
+                # Reset info text after 3 seconds
+                self.after(3000, lambda: self.lbl_info.configure(text="Tekan tombol [Insert] untuk menutup Overlay", text_color="#666666"))
+                
+            self.after(0, update_ui)
+            
+        threading.Thread(target=run, daemon=True).start()
