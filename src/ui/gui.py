@@ -1101,7 +1101,6 @@ class GameBoostFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
         
-        self.game_path = ""
         self.is_boosting = False
         self.suspended_pids = []
         
@@ -1114,7 +1113,7 @@ class GameBoostFrame(ctk.CTkFrame):
         title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
         
         desc = ctk.CTkLabel(
-            self, text="Tangguhkan proses non-kritis dan jalankan game dengan prioritas CPU maksimum.",
+            self, text="Kelola daftar game Anda. Ketika game terdaftar dijalankan, Game Mode akan aktif otomatis untuk mengoptimalkan RAM & CPU.",
             font=ctk.CTkFont(family="Segoe UI", size=13),
             text_color="#AAAAAA"
         )
@@ -1127,33 +1126,27 @@ class GameBoostFrame(ctk.CTkFrame):
         self.container.grid_columnconfigure(1, weight=1)
         self.container.grid_rowconfigure(0, weight=1)
         
-        # Left Panel: Game launcher
+        # Left Panel: Game list
         self.left_panel = ctk.CTkFrame(self.container, fg_color="#1E1E1E", corner_radius=12)
         self.left_panel.grid(row=0, column=0, padx=(0, 10), sticky="nsew")
         self.left_panel.grid_columnconfigure(0, weight=1)
+        self.left_panel.grid_rowconfigure(1, weight=1)
         
-        lbl_game = ctk.CTkLabel(self.left_panel, text="Pilih Game Anda", font=ctk.CTkFont(size=15, weight="bold"))
-        lbl_game.pack(pady=(15, 10), padx=20, anchor="w")
+        lbl_game = ctk.CTkLabel(self.left_panel, text="Daftar Game Auto-Boost", font=ctk.CTkFont(size=15, weight="bold"))
+        lbl_game.grid(row=0, column=0, pady=(15, 5), padx=20, sticky="w")
         
-        self.entry_game = ctk.CTkEntry(self.left_panel, placeholder_text="Belum ada game terpilih...", height=35)
-        self.entry_game.pack(pady=5, padx=20, fill="x")
-        self.entry_game.configure(state="disabled")
+        # Scrollable list
+        self.game_list_scroll = ctk.CTkScrollableFrame(self.left_panel, fg_color="#121212")
+        self.game_list_scroll.grid(row=1, column=0, padx=20, pady=5, sticky="nsew")
         
-        btn_choose = ctk.CTkButton(
-            self.left_panel, text="Pilih Game (.exe)",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#475569", hover_color="#334155",
-            command=self.choose_game_exe
-        )
-        btn_choose.pack(pady=10, padx=20, anchor="w")
-        
-        self.btn_boost = ctk.CTkButton(
-            self.left_panel, text="Aktifkan Game Boost & Jalankan",
-            font=ctk.CTkFont(size=14, weight="bold"),
+        # Button to add new game
+        btn_add = ctk.CTkButton(
+            self.left_panel, text="➕ Tambah Game Baru (.exe)",
+            font=ctk.CTkFont(size=13, weight="bold"),
             fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
-            height=45, command=self.toggle_boost
+            height=38, command=self.add_custom_game_exe
         )
-        self.btn_boost.pack(pady=20, padx=20, fill="x")
+        btn_add.grid(row=2, column=0, pady=15, padx=20, fill="x", sticky="ew")
         
         # Right Panel: Status / Suspended processes
         self.right_panel = ctk.CTkFrame(self.container, fg_color="#1E1E1E", corner_radius=12)
@@ -1175,19 +1168,85 @@ class GameBoostFrame(ctk.CTkFrame):
         self.proc_textbox.grid(row=2, column=0, pady=15, padx=20, sticky="nsew")
         self.proc_textbox.insert("1.0", "Daftar proses browser/media yang ditangguhkan sementara akan muncul di sini saat Boost aktif.")
         self.proc_textbox.configure(state="disabled")
+        
+        self.btn_boost = ctk.CTkButton(
+            self.right_panel, text="Aktifkan Manual Game Boost",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#10B981", hover_color="#059669", text_color="#FFFFFF",
+            height=40, command=self.toggle_boost
+        )
+        self.btn_boost.grid(row=3, column=0, pady=15, padx=20, sticky="ew")
+        
+        # Load the games list initially
+        self.render_game_list()
 
-    def choose_game_exe(self):
+    def render_game_list(self):
+        # Clear existing widgets in scroll frame
+        for widget in self.game_list_scroll.winfo_children():
+            widget.destroy()
+            
+        for exe_name, game_title in self.controller.custom_games.items():
+            row = tk.Frame(self.game_list_scroll, bg="#1E1E1E", height=45)
+            row.pack(fill="x", pady=3, padx=5)
+            row.pack_propagate(False)
+            
+            row.grid_columnconfigure(0, weight=1)
+            row.grid_columnconfigure(1, weight=0)
+            
+            # Left: Game Name & Executable
+            lbl_title = tk.Label(
+                row, text=game_title, font=("Segoe UI", 10, "bold"),
+                fg="#FFFFFF", bg="#1E1E1E", anchor="w"
+            )
+            lbl_title.grid(row=0, column=0, padx=10, pady=(4, 0), sticky="w")
+            
+            lbl_exe = tk.Label(
+                row, text=exe_name, font=("Segoe UI", 8, "italic"),
+                fg="#888888", bg="#1E1E1E", anchor="w"
+            )
+            lbl_exe.grid(row=1, column=0, padx=10, pady=(0, 4), sticky="w")
+            
+            # Right: Hapus Button
+            btn_delete = ctk.CTkButton(
+                row, text="Hapus", font=ctk.CTkFont(size=10, weight="bold"),
+                fg_color="#EF4444", hover_color="#DC2626", text_color="#FFFFFF",
+                width=60, height=24, command=lambda e=exe_name: self.delete_game(e)
+            )
+            btn_delete.grid(row=0, column=1, rowspan=2, padx=10, pady=8, sticky="e")
+
+    def delete_game(self, exe_name):
+        game_title = self.controller.custom_games[exe_name]
+        confirm = messagebox.askyesno(
+            "Hapus Game",
+            f"Apakah Anda yakin ingin menghapus '{game_title}' dari daftar Auto-Boost?"
+        )
+        if confirm:
+            del self.controller.custom_games[exe_name]
+            self.controller.save_settings()
+            self.render_game_list()
+            self.controller.show_status(f"Game '{game_title}' dihapus dari daftar.")
+
+    def add_custom_game_exe(self):
         file_path = filedialog.askopenfilename(
             title="Pilih Executable Game",
             filetypes=[("Executable Files", "*.exe")]
         )
         if file_path:
-            self.game_path = file_path
-            self.entry_game.configure(state="normal")
-            self.entry_game.delete(0, tk.END)
-            self.entry_game.insert(0, os.path.basename(file_path))
-            self.entry_game.configure(state="disabled")
+            exe_name = os.path.basename(file_path).lower()
             
+            # Prompt user for game display name
+            dialog = ctk.CTkInputDialog(
+                text=f"Masukkan nama/title untuk game '{exe_name}':",
+                title="Nama Game"
+            )
+            game_title = dialog.get_input()
+            if game_title and game_title.strip():
+                # Add to registry settings
+                self.controller.custom_games[exe_name] = game_title.strip()
+                self.controller.save_settings()
+                self.render_game_list()
+                self.controller.show_status(f"Game '{game_title}' berhasil ditambahkan ke daftar Auto-Boost.")
+
     def toggle_boost(self):
         if self.is_boosting:
             self.deactivate_boost()
@@ -1225,30 +1284,11 @@ class GameBoostFrame(ctk.CTkFrame):
             self.proc_textbox.insert(tk.END, "Tidak ada proses latar belakang non-kritis yang perlu ditangguhkan.\n")
         self.proc_textbox.configure(state="disabled")
         
-        # 3. Launch game (if selected)
-        if self.game_path and os.path.exists(self.game_path):
-            try:
-                self.controller.show_status(f"Meluncurkan game: {os.path.basename(self.game_path)}")
-                proc = subprocess.Popen(self.game_path, cwd=os.path.dirname(self.game_path))
-                
-                # Set Game Process priority to High
-                memory_cleaner.set_process_priority_high(proc.pid)
-                
-                # Thread untuk menunggu game keluar di background
-                def wait_game():
-                    proc.wait()
-                    self.after(0, self.deactivate_boost)
-                threading.Thread(target=wait_game, daemon=True).start()
-            except Exception as e:
-                messagebox.showerror("Gagal", f"Gagal meluncurkan game: {e}")
-                self.deactivate_boost()
-                return
-        
-        self.btn_boost.configure(text="Nonaktifkan Game Boost", state="normal", fg_color="#EF4444", hover_color="#DC2626")
+        self.btn_boost.configure(text="Nonaktifkan Manual Game Boost", state="normal", fg_color="#EF4444", hover_color="#DC2626")
         
     def deactivate_boost(self):
         self.is_boosting = False
-        self.btn_boost.configure(text="Aktifkan Game Boost & Jalankan", fg_color="#3B82F6", hover_color="#2563EB", state="disabled")
+        self.btn_boost.configure(text="Aktifkan Manual Game Boost", fg_color="#10B981", hover_color="#059669")
         self.controller.show_status("Mengembalikan proses latar belakang...")
         self.lbl_boost_status.configure(text="BOOST NONAKTIF", text_color="#888888")
         
@@ -1261,8 +1301,6 @@ class GameBoostFrame(ctk.CTkFrame):
         self.proc_textbox.delete("1.0", tk.END)
         self.proc_textbox.insert("1.0", f"Boost nonaktif. {resumed} proses latar belakang berhasil dipulihkan.")
         self.proc_textbox.configure(state="disabled")
-        
-        self.btn_boost.configure(state="normal")
 
 class DuplicateFinderFrame(ctk.CTkFrame):
     """Premium Duplicate File Finder tab using size & MD5 hash checks."""
@@ -2135,59 +2173,81 @@ class App(ctk.CTk):
             self.overlay_window = GameOverlayWindow(self)
             self.show_status("Game Overlay dibuka. Tekan [Insert] untuk menutup.")
 
+    def auto_open_game_overlay(self, game_name):
+        if not self.overlay_window or not self.overlay_window.winfo_exists():
+            self.overlay_window = GameOverlayWindow(self)
+            self.show_status(f"Game terdeteksi: {game_name}. Membuka Overlay.")
+        if self.overlay_window and self.overlay_window.winfo_exists():
+            self.overlay_window.lbl_info.configure(text=f"Terdeteksi Game: {game_name}", text_color="#10B981")
+            
+    def auto_close_game_overlay(self):
+        if self.overlay_window and self.overlay_window.winfo_exists():
+            self.overlay_window.destroy()
+            self.overlay_window = None
+            self.show_status("Game ditutup. Menutup Game Overlay.")
+            
     def start_game_detection_scanner(self):
         def scanner():
-            game_keywords = {
-                'csgo.exe': 'CS:GO / CS2',
-                'cs2.exe': 'Counter-Strike 2',
-                'valorant.exe': 'Valorant',
-                'gta5.exe': 'GTA V',
-                'rdr2.exe': 'Red Dead Redemption 2',
-                'cyberpunk2077.exe': 'Cyberpunk 2077',
-                'minecraft.exe': 'Minecraft',
-                'fortniteclient-win64-shipping.exe': 'Fortnite',
-                'dota2.exe': 'Dota 2',
-                'league of legends.exe': 'League of Legends',
-                'genshinimpact.exe': 'Genshin Impact',
-                'fifa.exe': 'FIFA/EA Sports FC',
-                'fc24.exe': 'EA Sports FC 24',
-                'apexlegends.exe': 'Apex Legends',
-                'robloxplayerbeta.exe': 'Roblox'
-            }
-            boosted_games = set()
+            active_game_process = None
+            active_game_display = None
+            
             while True:
                 try:
                     import psutil
                     import subprocess
-                    found_game = None
-                    for proc in psutil.process_iter(['name']):
-                        try:
-                            name_lower = proc.info['name'].lower()
-                            if name_lower in game_keywords:
-                                found_game = (name_lower, game_keywords[name_lower])
-                                break
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            continue
+                    
+                    # 1. Check if the currently monitored active game is still running
+                    game_is_running = False
+                    if active_game_process:
+                        for proc in psutil.process_iter(['name']):
+                            try:
+                                if proc.info['name'].lower() == active_game_process:
+                                    game_is_running = True
+                                    break
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
+                                
+                    # 2. If it was running but now closed
+                    if active_game_process and not game_is_running:
+                        # Auto close the overlay on UI thread
+                        self.after(0, self.auto_close_game_overlay)
+                        active_game_process = None
+                        active_game_display = None
+                        
+                    # 3. If no active game, scan for any registered game starting
+                    if not active_game_process:
+                        found_game = None
+                        for proc in psutil.process_iter(['name']):
+                            try:
+                                name_lower = proc.info['name'].lower()
+                                if name_lower in self.custom_games:
+                                    found_game = (name_lower, self.custom_games[name_lower])
+                                    break
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
+                                
+                        if found_game:
+                            active_game_process, active_game_display = found_game
+                            # Auto open the overlay on UI thread
+                            self.after(0, lambda name=active_game_display: self.auto_open_game_overlay(name))
+                            self.after(0, lambda name=active_game_display: self.show_game_detected_notification(name))
                             
-                    if found_game:
-                        game_exe, game_name = found_game
-                        if game_exe not in boosted_games:
-                            boosted_games.add(game_exe)
-                            # Auto boost
+                            # Auto boost!
                             try:
                                 subprocess.run("powercfg /s 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                             except:
                                 pass
+                            
                             import memory_cleaner
                             memory_cleaner.clean_process_working_sets()
                             if memory_cleaner.is_admin():
                                 memory_cleaner.clean_system_file_cache()
                                 memory_cleaner.clean_standby_list()
-                                
-                            self.after(0, lambda name=game_name: self.show_game_detected_notification(name))
                 except Exception as e:
                     print("Game scanner error:", e)
-                time.sleep(10)
+                    
+                time.sleep(3)
+                
         threading.Thread(target=scanner, daemon=True).start()
 
     def show_game_detected_notification(self, game_name):
@@ -2434,6 +2494,24 @@ class App(ctk.CTk):
     def load_settings(self):
         """Loads settings from registry HKEY_CURRENT_USER."""
         key_path = r"Software\Bersihin"
+        # Default game list
+        self.custom_games = {
+            'csgo.exe': 'CS:GO / CS2',
+            'cs2.exe': 'Counter-Strike 2',
+            'valorant.exe': 'Valorant',
+            'gta5.exe': 'GTA V',
+            'rdr2.exe': 'Red Dead Redemption 2',
+            'cyberpunk2077.exe': 'Cyberpunk 2077',
+            'minecraft.exe': 'Minecraft',
+            'fortniteclient-win64-shipping.exe': 'Fortnite',
+            'dota2.exe': 'Dota 2',
+            'league of legends.exe': 'League of Legends',
+            'genshinimpact.exe': 'Genshin Impact',
+            'fifa.exe': 'FIFA/EA FC',
+            'fc24.exe': 'EA Sports FC 24',
+            'apexlegends.exe': 'Apex Legends',
+            'robloxplayerbeta.exe': 'Roblox'
+        }
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
             self.autoclean_enabled = winreg.QueryValueEx(key, "AutoCleanEnabled")[0] == 1
@@ -2442,6 +2520,11 @@ class App(ctk.CTk):
                 self.floating_widget_enabled = winreg.QueryValueEx(key, "FloatingWidgetEnabled")[0] == 1
             except Exception:
                 self.floating_widget_enabled = False
+            try:
+                games_json = winreg.QueryValueEx(key, "CustomGames")[0]
+                self.custom_games = json.loads(games_json)
+            except Exception:
+                pass
             winreg.CloseKey(key)
         except Exception:
             self.autoclean_enabled = False
@@ -2456,6 +2539,7 @@ class App(ctk.CTk):
             winreg.SetValueEx(key, "AutoCleanEnabled", 0, winreg.REG_DWORD, 1 if self.autoclean_enabled else 0)
             winreg.SetValueEx(key, "AutoCleanThreshold", 0, winreg.REG_DWORD, self.autoclean_threshold)
             winreg.SetValueEx(key, "FloatingWidgetEnabled", 0, winreg.REG_DWORD, 1 if self.floating_widget_enabled else 0)
+            winreg.SetValueEx(key, "CustomGames", 0, winreg.REG_SZ, json.dumps(self.custom_games))
             winreg.CloseKey(key)
         except Exception:
             pass
@@ -3384,7 +3468,7 @@ class GameOverlayWindow(ctk.CTkToplevel):
         
         # Overlay dimensions
         self.width = 360
-        self.height = 280
+        self.height = 350
         
         # Center of the screen
         screen_w = self.winfo_screenwidth()
@@ -3431,9 +3515,9 @@ class GameOverlayWindow(ctk.CTkToplevel):
         self.ram_bar.place(x=185, y=35)
         self.ram_bar.set(0)
         
-        # 2. Game Mode Switch
-        self.switch_frame = ctk.CTkFrame(self.card, fg_color="transparent")
-        self.switch_frame.pack(fill="x", padx=20, pady=8)
+        # 2. Game Mode Switches
+        self.switches_container = ctk.CTkFrame(self.card, fg_color="transparent")
+        self.switches_container.pack(fill="x", padx=20, pady=5)
         
         # Retrieve current Game Boost status
         import subprocess
@@ -3447,22 +3531,52 @@ class GameOverlayWindow(ctk.CTkToplevel):
             
         self.boost_var = ctk.BooleanVar(value=self.is_boosted)
         self.switch_boost = ctk.CTkSwitch(
-            self.switch_frame, text="Ultra Game Boost (High Performance CPU)",
+            self.switches_container, text="Ultra Game Boost (Prioritas & Daya)",
             variable=self.boost_var,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             progress_color="#A855F7",
             command=self.toggle_boost
         )
-        self.switch_boost.pack(side="left")
+        self.switch_boost.pack(anchor="w", pady=4)
         
-        # 3. Clean RAM Button
-        self.btn_clean = ctk.CTkButton(
-            self.card, text="⚡ Bersihkan Memori Sekarang",
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            fg_color="#10B981", hover_color="#059669", text_color="#FFFFFF",
-            height=35, corner_radius=8, command=self.quick_clean_ram
+        # Retrieve current Windows Update Service status
+        self.is_wuauserv_stopped = False
+        try:
+            out = subprocess.check_output("sc query wuauserv", shell=True).decode()
+            if "STOPPED" in out:
+                self.is_wuauserv_stopped = True
+        except:
+            pass
+            
+        self.wuauserv_var = ctk.BooleanVar(value=self.is_wuauserv_stopped)
+        self.switch_wuauserv = ctk.CTkSwitch(
+            self.switches_container, text="Tangguhkan Windows Update (Cegah Lag)",
+            variable=self.wuauserv_var,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            progress_color="#A855F7",
+            command=self.toggle_wuauserv
         )
-        self.btn_clean.pack(fill="x", padx=20, pady=10)
+        self.switch_wuauserv.pack(anchor="w", pady=4)
+        
+        # 3. Action Buttons Frame
+        self.btn_container = ctk.CTkFrame(self.card, fg_color="transparent")
+        self.btn_container.pack(fill="x", padx=20, pady=8)
+        
+        self.btn_clean = ctk.CTkButton(
+            self.btn_container, text="⚡ Bersihkan Memori",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#10B981", hover_color="#059669", text_color="#FFFFFF",
+            height=34, corner_radius=8, command=self.quick_clean_ram
+        )
+        self.btn_clean.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        
+        self.btn_dns = ctk.CTkButton(
+            self.btn_container, text="🌐 Optimalkan DNS",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
+            height=34, corner_radius=8, command=self.flush_dns
+        )
+        self.btn_dns.pack(side="right", fill="x", expand=True, padx=(5, 0))
         
         # Status notice
         self.lbl_info = ctk.CTkLabel(
@@ -3511,20 +3625,54 @@ class GameOverlayWindow(ctk.CTkToplevel):
                 subprocess.run("powercfg /s 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 # Suspend non-essential processes to free CPU cycles
                 self.suspended_pids = memory_cleaner.suspend_non_essential_processes(exclude_pids=[os.getpid()])
-                self.btn_clean.configure(text=f"⚡ Game Mode: AKTIF ({len(self.suspended_pids)} Suspended)")
+                self.btn_clean.configure(text="⚡ Game Mode: AKTIF")
                 self.lbl_info.configure(text=f"Game Boost Aktif. Menangguhkan {len(self.suspended_pids)} proses.", text_color="#A855F7")
             else:
                 # Set to Balanced plan
                 subprocess.run("powercfg /s 381b4222-f694-41f0-9685-ff5bb260df2e", shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 # Resume suspended processes
                 if hasattr(self, 'suspended_pids') and self.suspended_pids:
-                    memory_cleaner.resume_suspended_processes(self.suspended_pids)
+                    memory_cleaner.resume_processes(self.suspended_pids)
                     self.suspended_pids = []
-                self.btn_clean.configure(text="⚡ Bersihkan Memori Sekarang")
+                self.btn_clean.configure(text="⚡ Bersihkan Memori")
                 self.lbl_info.configure(text="Tekan tombol [Insert] untuk menutup Overlay", text_color="#666666")
         except Exception as e:
             print("Failed to change power scheme / suspend:", e)
             
+    def toggle_wuauserv(self):
+        active = self.wuauserv_var.get()
+        import subprocess
+        def task():
+            try:
+                if active:
+                    subprocess.run("net stop wuauserv", shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.after(0, lambda: self.lbl_info.configure(text="Windows Update ditangguhkan sementara.", text_color="#10B981"))
+                else:
+                    subprocess.run("net start wuauserv", shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.after(0, lambda: self.lbl_info.configure(text="Windows Update dipulihkan kembali.", text_color="#666666"))
+            except Exception as e:
+                print("Failed to toggle wuauserv:", e)
+        threading.Thread(target=task, daemon=True).start()
+
+    def flush_dns(self):
+        self.btn_dns.configure(state="disabled", text="Mengoptimalkan...")
+        def task():
+            try:
+                import subprocess
+                subprocess.run("ipconfig /flushdns", shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                self.after(0, lambda: self.finish_dns(True))
+            except Exception:
+                self.after(0, lambda: self.finish_dns(False))
+        threading.Thread(target=task, daemon=True).start()
+
+    def finish_dns(self, success):
+        self.btn_dns.configure(state="normal", text="🌐 Optimalkan DNS")
+        if success:
+            self.lbl_info.configure(text="DNS Cache berhasil dibersihkan!", text_color="#10B981")
+        else:
+            self.lbl_info.configure(text="Gagal membersihkan DNS Cache.", text_color="#EF4444")
+        self.after(3000, lambda: self.lbl_info.configure(text="Tekan tombol [Insert] untuk menutup Overlay", text_color="#666666"))
+
     def quick_clean_ram(self):
         # Disable button during clean
         self.btn_clean.configure(state="disabled", text="Membersihkan...")
@@ -3547,7 +3695,7 @@ class GameOverlayWindow(ctk.CTkToplevel):
             
             # Update label on UI thread
             def update_ui():
-                self.btn_clean.configure(state="normal", text="⚡ Bersihkan Memori Sekarang")
+                self.btn_clean.configure(state="normal", text="⚡ Bersihkan Memori")
                 # Show flash alert
                 self.lbl_info.configure(text=f"RAM Dibersihkan: +{freed_mb:.0f} MB!", text_color="#10B981")
                 # Reset info text after 3 seconds
