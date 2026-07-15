@@ -990,13 +990,24 @@ class AdminGlobalSettingsFrame(ctk.CTkFrame):
         self.entry_url = ctk.CTkEntry(row_url, placeholder_text="https://github.com/...", height=32)
         self.entry_url.pack(side="left", fill="x", expand=True)
         
+        btn_row_u = ctk.CTkFrame(self.box_update, fg_color="transparent")
+        btn_row_u.pack(fill="x", padx=20, pady=(10, 20))
+        
         self.btn_save_u = ctk.CTkButton(
-            self.box_update, text="Simpan & Terapkan Pembaruan",
+            btn_row_u, text="Simpan & Terapkan Pembaruan",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color="#10B981", hover_color="#059669", text_color="#FFFFFF",
             width=220, height=35, command=self.save_update_settings
         )
-        self.btn_save_u.pack(padx=20, pady=20, anchor="w")
+        self.btn_save_u.pack(side="left", padx=(0, 10))
+        
+        self.btn_delete_u = ctk.CTkButton(
+            btn_row_u, text="Hapus Data Update",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#333333", hover_color="#444444", text_color="#EF4444",
+            width=180, height=35, command=self.delete_update_settings
+        )
+        self.btn_delete_u.pack(side="left")
         
         # Load values initially
         self.load_settings_data()
@@ -1071,6 +1082,30 @@ class AdminGlobalSettingsFrame(ctk.CTkFrame):
             else:
                 self.after(0, lambda: messagebox.showerror("Gagal", "Gagal menyimpan konfigurasi pembaruan."))
             self.after(0, lambda: self.btn_save_u.configure(state="normal", text="Simpan & Terapkan Pembaruan"))
+            
+        threading.Thread(target=worker, daemon=True).start()
+
+    def delete_update_settings(self):
+        confirm = messagebox.askyesno(
+            "Konfirmasi Hapus Update",
+            "Apakah Anda yakin ingin menghapus data pembaruan aktif?\nIni akan mengembalikan versi ke 1.0.0 dan membatalkan paksa update pada klien."
+        )
+        if not confirm:
+            return
+            
+        self.btn_delete_u.configure(state="disabled", text="Menghapus...")
+        
+        def worker():
+            import firebase_handler
+            ok = firebase_handler.delete_update_config(self.controller.admin_user['idToken'])
+            if ok:
+                self.after(0, lambda: self.entry_version.delete(0, tk.END))
+                self.after(0, lambda: self.entry_version.insert(0, "1.0.0"))
+                self.after(0, lambda: self.entry_url.delete(0, tk.END))
+                self.after(0, lambda: messagebox.showinfo("Sukses", "Pembaruan aktif berhasil dihapus dari database."))
+            else:
+                self.after(0, lambda: messagebox.showerror("Gagal", "Gagal menghapus pembaruan dari database."))
+            self.after(0, lambda: self.btn_delete_u.configure(state="normal", text="Hapus Data Update"))
             
         threading.Thread(target=worker, daemon=True).start()
 

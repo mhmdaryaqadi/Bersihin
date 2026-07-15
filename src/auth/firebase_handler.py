@@ -660,6 +660,20 @@ def set_update_config(admin_token, version, update_url):
         _, err = _make_rest_call(url, {"version": version, "update_url": update_url}, 'PATCH')
         return err is None
 
+def delete_update_config(admin_token):
+    """Menghapus atau mereset konfigurasi pembaruan oleh Admin."""
+    if is_mock_mode():
+        db = _get_local_db()
+        if "app_settings" in db:
+            db["app_settings"]["version"] = "1.0.0"
+            db["app_settings"]["update_url"] = ""
+        _save_local_db(db)
+        return True
+    else:
+        url = f"{firebase_config.DATABASE_URL.rstrip('/')}/app_settings.json?auth={admin_token}"
+        _, err = _make_rest_call(url, {"version": "1.0.0", "update_url": ""}, 'PATCH')
+        return err is None
+
 def get_broadcast_message():
     """Mengambil pesan siaran aktif."""
     if is_mock_mode():
