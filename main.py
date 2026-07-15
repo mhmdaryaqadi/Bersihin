@@ -17,6 +17,21 @@ def is_admin():
     except:
         return False
 
+def relaunch_as_admin():
+    """Menjalankan ulang aplikasi dengan hak akses Administrator (UAC)."""
+    try:
+        if getattr(sys, 'frozen', False):
+            path = sys.executable
+            args = " ".join(sys.argv[1:])
+        else:
+            path = sys.executable
+            args = f'"{os.path.abspath(sys.argv[0])}" ' + " ".join(sys.argv[1:])
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", path, args, None, 1)
+        sys.exit(0)
+    except Exception as e:
+        print("Gagal menjalankan ulang sebagai Administrator:", e)
+        sys.exit(1)
+
 import socket
 import threading
 
@@ -62,6 +77,10 @@ def check_single_instance(port=49201):
 def main():
     global app_instance
     
+    # Pastikan aplikasi berjalan sebagai Administrator
+    if not is_admin():
+        relaunch_as_admin()
+        
     # Check single instance using local TCP port
     check_single_instance()
 

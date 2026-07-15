@@ -20,6 +20,7 @@ def build():
         "--windowed",
         "--name=Bersihin",
         "--icon=assets/logo.ico",
+        "--uac-admin",
         "--add-data=assets/logo.ico;assets",
         "--add-data=assets/logo.png;assets",
         "--paths=src",
