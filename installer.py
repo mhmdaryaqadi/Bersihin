@@ -443,7 +443,7 @@ class InstallerApp(ctk.CTk):
             winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'"{uninst_exe}" /uninstall')
             winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, icon_path)
             winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Arya AL")
-            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.0")
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.1")
             winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, self.install_path)
             winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, 65000) # ~65 MB
             winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)

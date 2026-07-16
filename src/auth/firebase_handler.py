@@ -44,7 +44,7 @@ def _get_local_db():
             },
             "commands": {},
             "app_settings": {
-                "version": "1.0.0",
+                "version": "1.0.1",
                 "update_url": "https://github.com/mhmdaryaqadi/Bersihin/releases",
                 "broadcast_message": ""
             }

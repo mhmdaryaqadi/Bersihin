@@ -2389,7 +2389,7 @@ class App(ctk.CTk):
         self.status_lbl.pack(side="left", padx=15)
         
         self.credits_lbl = ctk.CTkLabel(
-            self.status_bar, text="Created by Arya AL | v1.0.0",
+            self.status_bar, text="Created by Arya AL | v1.0.1",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color="#888888"
         )
@@ -2690,7 +2690,7 @@ class App(ctk.CTk):
                     remote_ver = config.get("version", "1.0.0")
                     update_url = config.get("update_url", "")
                     
-                    local_ver = "1.0.0"
+                    local_ver = "1.0.1"
                     
                     r_parts = [int(x) for x in remote_ver.split('.')]
                     l_parts = [int(x) for x in local_ver.split('.')]
